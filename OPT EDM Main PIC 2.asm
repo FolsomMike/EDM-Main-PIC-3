@@ -667,7 +667,10 @@ setup:
     clrf    INTCON          ; disable all interrupts
                             
     movlw   0x7             ; turn off comparator, PortA pins set for I/O
-    movwf   CMCON           ; 7 -> Comparator Control Register - see note in function header
+;wip mks -- Updated code from PIC16F648A to PIC16F1459 -- register no longer valid.
+;    movwf   CMCON           ; 7 -> Comparator Control Register - see note in function header
+;
+
     movlw   0xff
     movwf   PORTB           ; 0xff -> Port B
     movlb   1               ; select bank 1
@@ -4232,14 +4235,14 @@ loopRFE1:
     movlb   1               ; select bank 1 [for PIC16F648]
     ;movlb   2               ; select bank 2 [for PIC16F876]
 	
-    movwf	EEADR			; place in EEprom read address register
+    ;movwf	EEADR			; place in EEprom read address register
 
 	;movlb   3              ; select bank 3 [for PIC16F876]
 	;bcf    EECON1,EEPGD	; read from EEprom (as opposed to Flash) [for PIC16F876]
-	bsf	    EECON1,RD		; perform EEProm read
+	;bsf	    EECON1,RD		; perform EEProm read
 
 	;bcf	movlb   2	    ; select bank 2 [for PIC16F876]
-	movf	EEDATA,W		; move data read into w
+	;movf	EEDATA,W		; move data read into w
 	movwf   INDF0   		; write to RAM
 	incf	FSR0L,F			; move to next address in RAM
 
@@ -4274,29 +4277,29 @@ loopWTE1:
     movlb   1       		; select bank 1 [for PIC16F648]
     ;movlb   2      		; select bank 2 [for PIC16F876]
 	
-	movwf	EEADR			; place in EEprom write address register
+	;movwf	EEADR			; place in EEprom write address register
 
 	movf	INDF0,W		; get first byte of block from RAM
 	incf	FSR0L,F			; move to next byte in RAM
-	movwf	EEDATA			; store in EEprom write data register
+	;movwf	EEDATA			; store in EEprom write data register
 
 	;movlb   3              ; select bank 3 [for PIC16F876]
     ;bcf	EECON1,EEPGD	; write to EEprom (as opposed to Flash) [for PIC16F876]
-	bsf	    EECON1,WREN		; enable EEprom write
+	;bsf	    EECON1,WREN		; enable EEprom write
 	bcf	    INTCON,GIE		; disable all interrupts
 	
 	movlw	0x55
-	movwf	EECON2			; put 0x55 into EECON2
+	;movwf	EECON2			; put 0x55 into EECON2
 	movlw	0xaa
-	movwf	EECON2			; put 0xaa into EECON2
-	bsf	    EECON1,WR	  	; begin the write process
+	;movwf	EECON2			; put 0xaa into EECON2
+	;bsf	    EECON1,WR	  	; begin the write process
 
 waitWTE1:	
     
-    btfsc	EECON1,WR		; loop until WR bit goes low (write finished)
+    ;btfsc	EECON1,WR		; loop until WR bit goes low (write finished)
 	goto	waitWTE1
 
-	bcf	EECON1,WREN		    ; disable writes
+	;bcf	EECON1,WREN		    ; disable writes
 	bsf	INTCON,GIE		    ; re-enable interrupts
 
     movlb   0               ; select bank 0
