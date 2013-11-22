@@ -245,7 +245,7 @@ EXTENDED_RATIO0  EQU     0x37
 
 ;#include <xc.h>
 
-#INCLUDE <STANDARD.MAC>     	; include standard macros
+#INCLUDE <STANDARD 2.MAC>     	; include standard macros
 
 ; Specify Device Configuration Bits
 
@@ -339,7 +339,7 @@ BLINK_ON_FLAG			EQU		0x01
 ; commonly used to reserve RAM space or Code space when producing "absolute" code, as is done here.
 ; 
 
-; Assign variables in RAM - Bank 0 - must set RP0:RP1 to 0:0 to access
+; Assign variables in RAM - Bank 0 - must set BSR to 0 to access
 ; Bank 0 has 80 bytes of free space
 
  cblock 0x20                ; starting address
@@ -455,7 +455,7 @@ BLINK_ON_FLAG			EQU		0x01
 
 ;-----------------
 
-; Assign variables in RAM - Bank 1 - must set RP0:RP1 to 0:1 to access
+; Assign variables in RAM - Bank 1 - must set BSR to 1 to access
 ; Bank 1 has 80 bytes of free space
 
  cblock 0xa0                ; starting address
@@ -543,7 +543,7 @@ BLINK_ON_FLAG			EQU		0x01
 
 ;-----------------
 
-; Assign variables in RAM - Bank 2 - must set RP0:RP1 to 1:0 to access
+; Assign variables in RAM - Bank 3 - must set BSR to 3 to access
 ; Bank 2 has 80 bytes of free space
 
  cblock 0x120                ; starting address
@@ -569,7 +569,8 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock	0x70
     W_TEMP
-    FSR_TEMP
+    FSR0L_TEMP
+    FSR0H_TEMP
     STATUS_TEMP
     PCLATH_TEMP	
  endc
@@ -609,6 +610,9 @@ BLINK_ON_FLAG			EQU		0x01
 	nop			            ; service routine gets
 	nop			            ; put at address 0x0004.
 
+
+;wip -- PIC16f1459 now saves important registers automatically on interrupt
+; keep PUSH and POP macros for possible future use -- just empty them for now
 
 ; interrupt vector at 0x0004
 ; NOTE: You must save values (PUSH_MACRO) and clear PCLATH before jumping to the interrupt
@@ -662,13 +666,13 @@ setup:
     movwf   CMCON           ; 7 -> Comparator Control Register - see note in function header
     movlw   0xff
     movwf   PORTB           ; 0xff -> Port B
-    bsf     STATUS,RP0      ; select bank 1
+    movlb   1               ; select bank 1
     movlw   0x78
     movwf   TRISB           ; 0x78 -> TRISB = PortB I/O 0111 1000 (1=input, 0=output)
-    bcf     STATUS,RP0      ; select bank 0
+    movlb   0               ; select bank 0
     movlw   0xff
     movwf   PORTA           ; 0xff -> Port A
-    bsf     STATUS,RP0      ; select bank 1
+    movlb   1               ; select bank 1
     movlw   0x38
     movwf   TRISA           ; 0x38 -> TRISA = PortA I/O 0011 1000 (1=input, 0=output)
 
@@ -682,8 +686,8 @@ setup:
                             ; bit 2 = 0 : Bits 2:0 control prescaler:
                             ; bit 1 = 0 :    000 = 1:2 scaling for Timer0 (if assigned to Timer0)
                             ; bit 0 = 0 :
-    
-    bcf     STATUS,RP0      ; select bank 0
+
+    movlb   0               ; select bank 0
     movlw   0x3
     movwf   PORTA           ; 0x3 -> Port A: LCD Ctrl=1, Rough/Fine Ctrl=1, EDMPwerSply Ctrl=0
     movlw   0xff
@@ -798,7 +802,7 @@ noClearDepth:
 
     ; set up the LCD buffer variables
 
-    bsf     STATUS,RP0      ; bank 1
+    movlb   1               ; select bank 1
 
     clrf    LCDFlags        
     movlw   LCDBuffer0
@@ -811,8 +815,7 @@ noClearDepth:
     bsf     INTCON,T0IE     ; enable TMR0 interrupts
     bsf     INTCON,GIE      ; enable all interrupts
 
-	bcf	    STATUS,RP0	    ; back to Bank 0
-    bcf     STATUS,RP1	    ; back to Bank 0
+    movlb   0               ; select bank 0
 
     bcf     MOTOR,ENABLE    ; enable the motor
 
@@ -916,7 +919,7 @@ handleTimer0Interrupt:
 
 	bcf 	INTCON,T0IF     ; clear the Timer0 overflow interrupt flag
 
-    bcf     STATUS,RP0      ; select data bank 0 to access variables
+    movlb   0               ; select bank 0
 
     movf    debounce0,W		; if debounce counter is zero, don't decrement it
     iorwf   debounce1,W
@@ -929,7 +932,7 @@ handleTimer0Interrupt:
 
 doLCD:
 
-    bsf     STATUS,RP0      ; select data bank 1 to access LCD buffer variables
+    movlb   1               ; select data bank 1 to access LCD buffer variables
 
 LCDBusyCheck:
 
@@ -966,9 +969,10 @@ startBitCheck:
     btfss   LCDFlags,startBit   ; if set, initiate a startbit and exit    
     goto    stopBitCheck
 
-    bcf     STATUS,RP0          ; bank 0
+    movlb   0                   ; select bank 0
+
     bcf     LCD,TDATA           ; transmit start bit (low)
-    bsf     STATUS,RP0          ; bank 1
+    movlb   1                   ; select bank 1
     
     bcf     LCDFlags,startBit   ; start bit done
     movlw   .8
@@ -980,9 +984,9 @@ stopBitCheck:
     btfss   LCDFlags,stopBit    ; if set, initiate a stopbit and exit
     goto    transmitByteT0I
 
-    bcf     STATUS,RP0          ; bank 0
+    movlb   0                   ; select bank 0
     bsf     LCD,TDATA           ; transmit stop bit (high)
-    bsf     STATUS,RP0          ; bank 1
+    movlb   1                   ; select bank 1
     
     bcf     LCDFlags,stopBit    ; stop bit done
     
@@ -1000,12 +1004,12 @@ transmitByteT0I:
     movwf   FSR             ; point FSR at the character    
     rlf     INDF,F          ; get the first bit to transmit
 
-    bcf     STATUS,RP0      ; bank 0
+    movlb   0               ; select bank 0
     bcf     LCD,TDATA       ; set data line low first (brief low if bit is to be a one will be
                             ;  ignored by receiver)
     btfsc   STATUS,C
     bsf     LCD,TDATA       ; set high if bit was a 1
-    bsf     STATUS,RP0      ; bank 1    
+    movlb   1               ; select bank 1
 
 endOfByteCheck:
 
@@ -1835,11 +1839,11 @@ quickRetractCN:
 
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCN
-	bsf     STATUS,RP0				; switch RAM page to access LCDFlags
+    movlb   1                       ; switch to bank 1 to access LCDFlags
     btfsc   LCDFlags,LCDBusy
 	goto    skipDirSymUpdateCN
  
-    bcf     STATUS,RP0      		; switch back to main variables RAM page
+    movlb   0                       ; switch back to main variables RAM page
 	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
  
     movlw   0xc0
@@ -1855,7 +1859,7 @@ quickRetractCN:
 
 skipDirSymUpdateCN:
 
-	bcf     STATUS,RP0      		; switch back to main variables RAM page
+    movlb   0                       ; select bank 0
 
     btfsc   COMPARATOR,LO_LIMIT     ; check again, loop quickly until current is within
     goto    quickRetractCN          ; limits to avoid glow plugging
@@ -1864,14 +1868,15 @@ skipDirSymUpdateCN:
 
 displayPosLUCL:             		; updates the display if it is time to do so
 
-    bsf     STATUS,RP0				; switch RAM page to access LCDFlags
+    movlb   1                       ; switch RAM page to access LCDFlags
+
     btfss   LCDFlags,LCDBusy
     goto    displayCN
     goto    checkPositionCN 		; don't display if print buffer not ready      
 
 displayCN:
 
-    bcf     STATUS,RP0      		; switch back to main variables RAM page
+    movlb   0                       ; select bank 0 for main variables
 
     bcf     flags,UPDATE_DISPLAY 	; clear flag so no update until data changed again
 
@@ -1898,7 +1903,7 @@ displayCN:
 
 checkPositionCN:
 
-    bcf     STATUS,RP0				; switch back to main variables RAM page
+    movlb   0                       ; select bank 0 for main variables
 
     movlw   depth3
     call    isPosGtYQ
@@ -2114,11 +2119,13 @@ quickRetractCT:
 
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCT
-	bsf     STATUS,RP0				; switch RAM page to access LCDFlags
+
+    movlb   1                       ; select bank 1 for LCDFlags
+
     btfsc   LCDFlags,LCDBusy
 	goto    skipDirSymUpdateCT
  
-    bcf     STATUS,RP0      		; switch back to main variables RAM page
+    movlb   0                       ; select bank 0 for main variables
 	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
  
     movlw   0xc0
@@ -2134,7 +2141,7 @@ quickRetractCT:
 
 skipDirSymUpdateCT:
 
-	bcf     STATUS,RP0      ; switch back to main variables RAM page
+    movlb   0               ; select bank 0 for main variables
 
 	; user counter to return blade to original start position
 
@@ -2896,15 +2903,17 @@ updateJM:
 
 noExtraDelayJM:
 
-    bsf     STATUS,RP0
+    movlb   1               ; select bank 1
+
     btfss   LCDFlags,LCDBusy
     goto    displayJM
-    bcf     STATUS,RP0
+    movlb   0               ; select bank 0
+
     goto    loopJM          ; don't display if print buffer not ready      
 
 displayJM:
 
-    bcf     STATUS,RP0      
+    movlb   0               ; select bank 0
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
@@ -3363,14 +3372,19 @@ loopIZ1:
 ;--------------------------------------------------------------------------------------------------
    
 ;--------------------------------------------------------------------------------------------------
-; SetBank0ClrWDT        Set Bank 0, IRP = Bank 0/1, Clear WatchDog timer
+; SetBank0ClrWDT        
+;
+; Set Bank 0, Clear high byte of FSR pointers, Clear WatchDog timer
 ; 
 
 SetBank0ClrWDT:
 
-    bcf     STATUS,IRP      ;bank 0/1 for indirect addressing
-    bcf     STATUS,RP1      ;bank 0 for direct addressing
-    bcf     STATUS,RP0
+    movlw   0               ;high byte of indirect addressing pointers -> 0
+    movwf   FSR0H
+    movwf   FSR1H
+
+    movlb   0               ;bank 0 for direct addressing
+
     clrwdt                  ;keep watchdog from triggering
     return
 
@@ -3960,14 +3974,14 @@ flushLCD:
 
 ; prepare the interrupt routine for printing
 
-    bsf     STATUS,RP0      ; bank 1
+    movlb   1               ; select bank 1
 
     movlw   LCDBuffer0
     movwf   LCDBufferPtr
     bsf     LCDFlags,startBit
     bsf     LCDFlags,LCDBusy    ; set this bit last to make sure everything set up before interrupt
 
-    bcf     STATUS,RP0      ; bank 0
+    movlb   0               ; select bank 0
 
     return
 
@@ -3982,14 +3996,14 @@ flushLCD:
 
 waitLCD:
 
-    bsf     STATUS,RP0      ; bank 1
+    movlb   1               ; select bank 1
 
 loopWBL1:                   ; loop until interrupt routine finished writing character
 
     btfsc   LCDFlags,LCDBusy
     goto    loopWBL1
 
-    bcf     STATUS,RP0      ; bank 0
+    movlb   0               ; select bank 0
 
     return
 
@@ -4169,7 +4183,7 @@ writeWordLCD:
 
 writeByteLCD:
 
-    bsf     STATUS,RP0      ; bank 1
+    movlb   1               ; select bank 1
 
     movwf   LCDScratch0     ; store character
 
@@ -4182,8 +4196,8 @@ writeByteLCD:
 
     incf    LCDBufferCnt,F  ; count characters placed in the buffer
     incf    LCDBufferPtr,F  ; point to next buffer position
-    
-    bcf     STATUS,RP0      ; bank 0
+
+    movlb   0               ; select bank 0
 
     return    
 
@@ -4209,24 +4223,23 @@ readFromEEprom:
 loopRFE1:
 
 	movf	eepromAddress,W	; load EEprom address from which to read
-	incf	eepromAddress,F	; move to next address in EEprom	
-	    
-    bsf	    STATUS,RP0		; select bank 1 [for PIC16F648]
-    ;bsf    STATUS,RP1		; select bank 2 [for PIC16F876]
+	incf	eepromAddress,F	; move to next address in EEprom
+
+    movlb   1               ; select bank 1 [for PIC16F648]
+    ;movlb   2               ; select bank 2 [for PIC16F876]
 	
     movwf	EEADR			; place in EEprom read address register
 
-	;bsf    STATUS,RP0		; select bank 3 [for PIC16F876]
+	;movlb   3              ; select bank 3 [for PIC16F876]
 	;bcf    EECON1,EEPGD	; read from EEprom (as opposed to Flash) [for PIC16F876]
 	bsf	    EECON1,RD		; perform EEProm read
 
-	;bcf	STATUS,RP0	    ; select bank 2 [for PIC16F876]
+	;bcf	movlb   2	    ; select bank 2 [for PIC16F876]
 	movf	EEDATA,W		; move data read into w
 	movwf   INDF			; write to RAM
 	incf	FSR,F			; move to next address in RAM
 
-	bcf	STATUS,RP0		    ; select bank 0
-	bcf	STATUS,RP1
+    movlb   0               ; select bank 0
 
 	decfsz	eepromCount,F	; count down number of bytes transferred
 	goto	loopRFE1		; not zero yet - read more bytes
@@ -4254,8 +4267,8 @@ loopWTE1:
     movf	eepromAddress,W	; load EEprom address at which to store
 	incf	eepromAddress,F	; move to next address in EEprom	
 
-    bsf	    STATUS,RP0		; select bank 1 [for PIC16F648]
-    ;bsf    STATUS,RP1		; select bank 2 [for PIC16F876]
+    movlb   1       		; select bank 1 [for PIC16F648]
+    ;movlb   2      		; select bank 2 [for PIC16F876]
 	
 	movwf	EEADR			; place in EEprom write address register
 
@@ -4263,7 +4276,7 @@ loopWTE1:
 	incf	FSR,F			; move to next byte in RAM
 	movwf	EEDATA			; store in EEprom write data register
 
-	;bsf	    STATUS,RP0	; select bank 3 [for PIC16F876]
+	;movlb   3              ; select bank 3 [for PIC16F876]
     ;bcf	EECON1,EEPGD	; write to EEprom (as opposed to Flash) [for PIC16F876]
 	bsf	    EECON1,WREN		; enable EEprom write
 	bcf	    INTCON,GIE		; disable all interrupts
@@ -4282,8 +4295,7 @@ waitWTE1:
 	bcf	EECON1,WREN		    ; disable writes
 	bsf	INTCON,GIE		    ; re-enable interrupts
 
-	bcf	STATUS,RP0		    ; select bank 0
-	bcf	STATUS,RP1
+    movlb   0               ; select bank 0
 
 	decfsz	eepromCount,F	; count down number of bytes transferred
 	goto	loopWTE1        ; not zero yet - write more bytes

@@ -42,8 +42,10 @@ PUSH_MACRO MACRO
 	movf    PCLATH,W                ; store PCLATH
 	movwf   PCLATH_TEMP
 
-	movf	FSR,W			; store FSR
-	movwf	FSR_TEMP
+	movf	FSR0L,W			; store FSR
+	movwf	FSR0L_TEMP
+	movf	FSR0H,W
+	movwf	FSR0H_TEMP
 
 	ENDM                            ; end this macro
 
@@ -61,8 +63,10 @@ PUSH_MACRO MACRO
 
 POP_MACRO MACRO
 
-	movf	FSR_TEMP,W		; restore FSR
-	movwf	FSR
+	movf	FSR0L_TEMP,W            ; restore FSR
+	movwf	FSR0L
+	movf	FSR0H_TEMP,W
+	movwf	FSR0H
 
 	movf    PCLATH_TEMP,W           ; restore PCLATH
 	movwf   PCLATH
