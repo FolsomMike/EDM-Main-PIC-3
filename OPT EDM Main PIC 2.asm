@@ -659,7 +659,11 @@ menuLoop:
 setup:
 
 ;start of hardware configuration
-    
+
+    movlw   0               ;high byte of indirect addressing pointers -> 0
+    movwf   FSR0H
+    movwf   FSR1H
+
     clrf    INTCON          ; disable all interrupts
                             
     movlw   0x7             ; turn off comparator, PortA pins set for I/O
@@ -725,7 +729,7 @@ setup:
     ; read the value stored for flags from the EEProm
 
     movlw   flags           ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddress
     movlw   .1
@@ -746,7 +750,7 @@ setup:
     ; note: these values must be kept contiguous in memory
 
     movlw   sparkLevelNotch     ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeSparkLevelNotch   ; address in EEprom
     movwf   eepromAddress
     movlw   .2
@@ -784,7 +788,7 @@ noDefaultEEpromValues:
     ; read the value stored for depth from the EEProm
 
     movlw   depth3          ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeDepth3        ; address in EEprom
     movwf   eepromAddress
     movlw   .4
@@ -835,7 +839,7 @@ noClearDepth:
 saveFlagsToEEprom:
 
     movlw   flags           ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddress
     movlw   .1
@@ -1001,7 +1005,7 @@ stopBitCheck:
 transmitByteT0I:
 
     movf    LCDBufferPtr,W  ; get pointer to next character to be transmitted
-    movwf   FSR             ; point FSR at the character    
+    movwf   FSR0L           ; point FSR at the character
     rlf     INDF,F          ; get the first bit to transmit
 
     movlb   0               ; select bank 0
@@ -1148,15 +1152,15 @@ skipSB1:
 
 zeroQuad:
 
-    movwf   FSR             ; point FSR to first byte
+    movwf   FSR0L           ; point FSR to first byte
     clrw                    ; W = 0
 
     movwf  INDF             ; clear each byte
-    incf   FSR,F
+    incf   FSR0L,F
     movwf  INDF             ; clear each byte
-    incf   FSR,F
+    incf   FSR0L,F
     movwf  INDF             ; clear each byte
-    incf   FSR,F
+    incf   FSR0L,F
     movwf  INDF             ; clear each byte
 
     return
@@ -2333,14 +2337,14 @@ updateAS:
     goto    wallModeAS
 
     movlw   sparkLevelNotch ; transfer value to Notch variable
-    movwf   FSR
+    movwf   FSR0L
 
     goto    processValueAS
 
 wallModeAS:
 
     movlw   sparkLevelWall  ; transfer value to Notch variable
-    movwf   FSR
+    movwf   FSR0L
 
 processValueAS:
 
@@ -2386,7 +2390,7 @@ saveSparkLevelsToEEprom:
     ; note: these values must be kept contiguous in memory
 
     movlw   sparkLevelNotch     ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeSparkLevelNotch   ; address in EEprom
     movwf   eepromAddress
     movlw   .2
@@ -2576,7 +2580,7 @@ endSD:
 ; save the value stored for depth in the EEProm
 
     movlw   depth3          ; address in RAM
-    movwf   FSR
+    movwf   FSR0L
     movlw   eeDepth3        ; address in EEprom
     movwf   eepromAddress
     movlw   .4
@@ -2689,7 +2693,7 @@ loopABD:
 ; jog up button press    
 
     movf    scratch7,W
-    movwf   FSR
+    movwf   FSR0L
     incf    INDF,F          ; increment the digit
     
     movlw   .10
@@ -2710,7 +2714,7 @@ skip_upABD:
 ; jog down button press
 
     movf    scratch7,W
-    movwf   FSR
+    movwf   FSR0L
     decf    INDF,F          ; decrement the digit
     
     movlw   0xff            
@@ -2740,7 +2744,7 @@ updateABD:
     call    writeControl    ; prepare to overwrite the digit
     
     movf    scratch7,W
-    movwf   FSR
+    movwf   FSR0L
     movf    INDF,W
     addlw   0x30            ; convert to ASCII
     call    writeChar       ; write the digit
@@ -3258,7 +3262,7 @@ displayBCDVar:
 
     movwf   scratch5        ; store pointer
 
-    movwf   FSR             ; point FSR at first digit
+    movwf   FSR0L           ; point FSR at first digit
     
     movf    INDF,W
     addlw   0x30            ; convert BCD digit to ASCII
@@ -3274,7 +3278,7 @@ loopDBV1:
 
     incf    scratch5,F      ; move to next digit    
     movf    scratch5,W
-    movwf   FSR             ; point FSR to next digit
+    movwf   FSR0L           ; point FSR to next digit
 
     movf    INDF,W
     addlw   0x30            ; convert BCD digit to ASCII
@@ -3348,7 +3352,7 @@ displaySpeed:
 
 isZero:
 
-    movwf   FSR             ; point FSR at first digit
+    movwf   FSR0L           ; point FSR at first digit
     
     movlw   .4              
     movwf   scratch0        ; four bytes
@@ -3359,7 +3363,7 @@ loopIZ1:
     btfss   STATUS,Z        ; if any byte not zero return
     return
 
-    incf    FSR,F           ; point to next digit
+    incf    FSR0L,F         ; point to next digit
 
     decfsz  scratch0,F      ; stop when count is zero
     goto    loopIZ1
@@ -3542,26 +3546,26 @@ L13:
 
 isPosGtYQ:
 
-    movwf   FSR             ; point FSR to YQ
+    movwf   FSR0L           ; point FSR to YQ
 
     movf    INDF,W          ; compare most sig digits
     subwf   position3,W
     btfss   STATUS,C        ; if no borrow, position3 is larger or equal
     return
     
-    incf    FSR,F           ; compare next digit
+    incf    FSR0L,F         ; compare next digit
     movf    INDF,W
     subwf   position2,W
     btfss   STATUS,C        ; if no borrow, position2 is larger or equal
     return
 
-    incf    FSR,F           ; compare next digit
+    incf    FSR0L,F         ; compare next digit
     movf    INDF,W
     subwf   position1,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
         
-    incf    FSR,F           ; compare next digit
+    incf    FSR0L,F         ; compare next digit
     movf    INDF,W
     subwf   position0,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
@@ -3620,7 +3624,7 @@ incBCDVar:
     movf    scratch0,W       ; reload the variable address
 
     addlw   .4              
-    movwf   FSR             ; point to the sign
+    movwf   FSR0L           ; point to the sign
     
     movf    INDF,F
     btfss   STATUS,Z        ; check pos/neg
@@ -3648,7 +3652,7 @@ negativeIBV:
 
     movf    scratch0,W      ; retrieve variable address
     addlw   .4              
-    movwf   FSR             ; point to the sign
+    movwf   FSR0L           ; point to the sign
     movlw   0x0
     movwf   INDF            ; set sign positive
 
@@ -3702,7 +3706,7 @@ decBCDVar:
 
     movf    scratch0,W  
     addlw   .4              
-    movwf   FSR             ; point to the sign
+    movwf   FSR0L           ; point to the sign
     
     movf    INDF,F
     btfss   STATUS,Z        ; check pos/neg
@@ -3722,7 +3726,7 @@ negativeDBV:
 
     movf    scratch0,W      ; retrieve variable address
     addlw   .4              
-    movwf   FSR             ; point to the sign
+    movwf   FSR0L           ; point to the sign
     movlw   0x01
     movwf   INDF            ; set sign negative
 
@@ -3749,7 +3753,7 @@ negativeDBV:
 incBCDAbs:
 
     addlw   .3              ; point to digit 0
-    movwf   FSR             ; point FSR to variable
+    movwf   FSR0L           ; point FSR to variable
 
     movlw   1
     addwf   INDF,F          ; add one to digit 0
@@ -3760,7 +3764,7 @@ incBCDAbs:
 
     clrf    INDF            ; wraps to 0 after 9
     
-    decf   FSR,F            ; digit 1
+    decf   FSR0L,F          ; digit 1
     movlw   1
     addwf   INDF,F          ; add one to digit 1
     movlw   .10
@@ -3770,7 +3774,7 @@ incBCDAbs:
    
     clrf    INDF            ; wraps to 0 after 9
 
-    decf    FSR,F           ; digit 2
+    decf    FSR0L,F         ; digit 2
     movlw   1
     addwf   INDF,F          ; add one to digit 2
     movlw   .10
@@ -3780,7 +3784,7 @@ incBCDAbs:
 
     clrf    INDF            ; wraps to 0 after 9
 
-    decf    FSR,F           ; digit 3
+    decf    FSR0L,F         ; digit 3
     movlw   1
     addwf   INDF,F          ; add one to digit 3
     movlw   .10
@@ -3813,7 +3817,7 @@ incBCDAbs:
 decBCDAbs:
 
     addlw   .3              ; point to digit 0
-    movwf   FSR             ; point FSR to variable
+    movwf   FSR0L           ; point FSR to variable
 
     movlw   .1
     subwf   INDF,F          ; subtract one from digit 0
@@ -3823,7 +3827,7 @@ decBCDAbs:
     movlw   .9
     movwf   INDF            ; wraps to 9 after 0
     
-    decf    FSR,F           ; digit 1
+    decf    FSR0L,F         ; digit 1
     movlw   .1
     subwf   INDF,F          ; subtract one from digit 1
     btfsc   STATUS,C        ; borrow? (C will = 0)
@@ -3832,7 +3836,7 @@ decBCDAbs:
     movlw   .9
     movwf   INDF            ; wraps to 9 after 0
     
-    decf    FSR,F           ; digit 2
+    decf    FSR0L,F         ; digit 2
     movlw   .1
     subwf   INDF,F          ; subtract one from digit 2
     btfsc   STATUS,C        ; borrow? (C will = 0)
@@ -3841,7 +3845,7 @@ decBCDAbs:
     movlw   .9
     movwf   INDF            ; wraps to 9 after 0
 
-    decf    FSR,F           ; digit 3
+    decf    FSR0L,F         ; digit 3
     movlw   .1
     subwf   INDF,F          ; subtract one from digit 3
         
@@ -3875,23 +3879,23 @@ decBCDAbs:
 
 isQuadZero:
 
-    movwf   FSR             ; point to variable
+    movwf   FSR0L           ; point to variable
 
     movf    INDF,F
     btfss   STATUS,Z        ; check for zero
     return
 
-    incf    FSR,F           ; next digit
+    incf    FSR0L,F         ; next digit
     movf    INDF,F
     btfss   STATUS,Z        ; check for zero
     return
 
-    incf    FSR,F           ; next digit
+    incf    FSR0L,F         ; next digit
     movf    INDF,F
     btfss   STATUS,Z        ; check for zero
     return
 
-    incf    FSR,F           ; next digit
+    incf    FSR0L,F         ; next digit
     movf    INDF,F
 
     return
@@ -4188,7 +4192,7 @@ writeByteLCD:
     movwf   LCDScratch0     ; store character
 
     movf    LCDBufferPtr,W
-    movwf   FSR             ; point to next buffer position
+    movwf   FSR0L           ; point to next buffer position
 
     movf    LCDScratch0,W   ; retrieve character
 
@@ -4237,7 +4241,7 @@ loopRFE1:
 	;bcf	movlb   2	    ; select bank 2 [for PIC16F876]
 	movf	EEDATA,W		; move data read into w
 	movwf   INDF			; write to RAM
-	incf	FSR,F			; move to next address in RAM
+	incf	FSR0L,F			; move to next address in RAM
 
     movlb   0               ; select bank 0
 
@@ -4273,7 +4277,7 @@ loopWTE1:
 	movwf	EEADR			; place in EEprom write address register
 
 	movf	INDF,W			; get first byte of block from RAM
-	incf	FSR,F			; move to next byte in RAM
+	incf	FSR0L,F			; move to next byte in RAM
 	movwf	EEDATA			; store in EEprom write data register
 
 	;movlb   3              ; select bank 3 [for PIC16F876]
