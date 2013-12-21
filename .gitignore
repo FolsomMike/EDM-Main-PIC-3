@@ -21,3 +21,4 @@ Distributions/
 *.mcw
 *.MCW
 OPT EDM Main PIC 2.X/build
+OPT EDM Main PIC 2.X/*.fil
