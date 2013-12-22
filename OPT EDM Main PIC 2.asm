@@ -151,41 +151,36 @@
 ;
 ; Port A
 ;
-; RA0   Out - serial data line to LCD
-; RA1   Out - Rough/Fine Control Output
-; RA2   Out - Shutdown to EDM power supply
-; RA3   In  - High Limit Input to Comparator
-; RA4   In  - Low  Limit Input to Comparator
-; RA5   In  - EDM Current Short Detect
-; RA6   xxx - XTAL Circuit
-; RA7   xxx - XTAL Circuit
+; RA0   In  - serial data in line -- com link to other devices
+; RA1   In  - unused
+; RA2   xxx - not implemented in PIC16f1459
+; RA3   In  - short detect
+; RA4   In  - cutting current high limit trigger
+; RA5   Out - cutting current power supply on/off
+; RA6   xxx - not implemented in PIC16f1459
+; RA7   xxx - not implemented in PIC16f1459
 ;
 ; Port B
 ;
-; RB0   Out - Motor Step
-; RB1   Out - Motor Direction
-; RB2   Out - Motor Mode Step Size - (Microstep Select Full/Half/Quarter/Eighth)
-; RB3   In  - Reset Button
-; RB4   In  - Jog Up Button
-; RB5   In  - Jog Down Button
-; RB6   In -  Mode Button & PIC Programmer Interface
-; RB7   Out - Motor Enable & PIC Programmer Interface
+; RB0   xxx - not implemented in PIC16f1459
+; RB1   xxx - not implemented in PIC16f1459
+; RB2   xxx - not implemented in PIC16f1459
+; RB3   xxx - not implemented in PIC16f1459
+; RB4   I/O - I2CSDA
+; RB5   In  - Jog Down Switch
+; RB6   Out - I2CSCL
+; RB7   Out - serial data out line -- com link to other devices
 ;
-; Function by System
+; Port C
 ;
-; Motor
-;
-; RBO   Motor Step
-; RB1   Motor Direction
-; RB2   Motor Mode Step Size - (Microstep Select Full/Half/Quarter/Eighth)
-; RB7   Motor Enable & PIC Programmer Interface
-;
-; Buttons
-;
-; RB3   Reset Button
-; RB4   Jog Up Button
-; RB5   Jog Down Button
-; RB6   Mode Button PIC Programmer Interface
+; RC0   Out - motor enable
+; RC1   In  - Mode Switch
+; RC2   In  - Jog Up Switch
+; RC3   Out - motor direction
+; RC4   Out - motor step
+; RC5   In  - cutting current low limit trigger
+; RC6   Out - Motor Mode Step Size - (Microstep Select Full/Half/Quarter/Eighth)
+; RC7   In  - Select Switch
 ;
 ;end of Control Control Description
 ;--------------------------------------------------------------------------------------------------
@@ -198,7 +193,7 @@
 ;
 ; Jog Up and Jog Down buttons used to move cutting head up & down.
 ;
-; Enter button used to accept and entry or selection, stop a function and return to a menu.
+; Select button used to accept an entry or selection, stop a function, or return to a menu.
 ;  (also referred to as "Reset" on the schematic and "Zero Reset" on wiring harness"
 ;
 ;--------------------------------------------------------------------------------------------------
@@ -251,11 +246,33 @@ EXTENDED_RATIO0  EQU     0x37
 
 ; CONFIG1
 ; __config 0xF9E4
- __CONFIG _CONFIG1, _FOSC_INTOSC & _WDTE_OFF & _PWRTE_OFF & _MCLRE_ON & _CP_OFF & _BOREN_OFF & _CLKOUTEN_OFF & _IESO_ON & _FCMEN_ON
+ __CONFIG _CONFIG1, _FOSC_INTOSC & _WDTE_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _BOREN_OFF & _CLKOUTEN_OFF & _IESO_OFF & _FCMEN_OFF
 ; CONFIG2
 ; __config 0xFFFF
- __CONFIG _CONFIG2, _WRT_OFF & _CPUDIV_CLKDIV6 & _USBLSCLK_48MHz & _PLLMULT_3x & _PLLEN_ENABLED & _STVREN_ON & _BORV_LO & _LPBOR_OFF & _LVP_ON
+ __CONFIG _CONFIG2, _WRT_ALL & _CPUDIV_NOCLKDIV & _USBLSCLK_48MHz & _PLLMULT_4x & _PLLEN_DISABLED & _STVREN_ON & _BORV_LO & _LPBOR_OFF & _LVP_OFF
 
+; _FOSC_INTOSC -> internal oscillator, I/O function on CLKIN pin
+; _WDTE_OFF -> watch dog timer disabled
+; _PWRTE_OFF -> Power Up Timer disabled
+; _MCLRE_OFF -> MCLR/VPP pin is digital input
+; _CP_OFF -> Flash Program Memory Code Protection off
+; _BOREN_OFF -> Power Brown-out Reset off
+; _CLKOUTEN_OFF -> CLKOUT function off, I/O or oscillator function on CLKOUT pin
+; _IESO_OFF -> Internal/External Oscillator Switchover off
+;   (not used for this application since there is no external clock)
+; _FCMEN_OFF -> Fail-Safe Clock Monitor off
+;   (not used for this application since there is no external clock)
+; _WRT_ALL -> Flash Memory Self-Write Protection on -- no writing to flash
+;
+; _CPUDIV_NOCLKDIV -> CPU clock not divided
+; _USBLSCLK_48MHz -> only used for USB operation
+; _PLLMULT_4x -> sets PLL (if enabled) multiplier -- 4x allows software override
+; _PLLEN_DISABLED -> the clock frequency multiplier is not used
+;
+; _STVREN_ON -> Stack Overflow/Underflow Reset on
+; _BORV_LO -> Brown-out Reset Voltage Selection -- low trip point
+; _LPBOR_OFF -> Low-Power Brown-out Reset Off
+; _LVP_OFF -> Low Voltage Programming off
 ;
 ; end of configurations
 ;--------------------------------------------------------------------------------------------------
@@ -263,29 +280,56 @@ EXTENDED_RATIO0  EQU     0x37
 ;--------------------------------------------------------------------------------------------------
 ; Hardware Definitions
 
-LCD             EQU     0x05		; PORTA
-TDATA           EQU     0x00		; RA0
+; Port A
 
-COMPARATOR      EQU     0x05		; PORTA
-HI_LIMIT        EQU     0x03		; RA3
-LO_LIMIT		EQU		0x04		; RA4
+SERIAL_IN_P     EQU     PORTA
+SERIAL_IN       EQU     RA0         ; input ~ RA0 can only be input on PIC16f1459
+UNUSED_RA1_P    EQU     PORTA
+UNUSED_RA1      EQU     RA1         ; input ~ RA1 can only be input on PIC16f1459
+;NA_RA2         EQU     RA2         ; RA2 not implemented on PIC16f1459
+SHORT_DETECT_P  EQU     PORTA
+SHORT_DETECT    EQU     RA3         ; input ~ RA3 can only be input on PIC16f1459
+HI_LIMIT_P      EQU     PORTA
+HI_LIMIT        EQU     RA4         ; input ~ cutting current hight limit
+POWER_ON_P      EQU     PORTA
+POWER_ON        EQU     RA5         ; output
+;NA_RA6         EQU     RA6         ; RA6 not implemented on PIC16f1459
+;NA_RA7         EQU     RA7         ; RA7 not implemented on PIC16f1459
 
-EDM             EQU     0x05		; PORTA
-ROUGH_FINE      EQU     0x01		; RA1
-POWER_ON        EQU     0x02		; RA2
-SHORT_DETECT    EQU     0x05		; RA5
+; Port B
 
-BUTTONS         EQU     0x06		; PORTB
-RESET_BTN       EQU     0x03		; RB3
-JOG_UP          EQU     0x04		; RB4
-JOG_DWN         EQU     0x05		; RB5
-MODE            EQU     0x06		; RB6
+I2CSDA_LINE     EQU     RB4
+JOG_DWN_SW_P    EQU     PORTB
+JOG_DWN_SW      EQU     RB5         ; input
+I2CSCL_LINE     EQU     RB6
+SERIAL_OUT_P    EQU     PORTB
+SERIAL_OUT      EQU     RB7         ; output ~ serial data out to other devices
 
-MOTOR           EQU     0x06		; PORTB
-STEP            EQU     0x00		; RB0
-DIR_SEL         EQU     0x01		; RB1
-STEPSIZE        EQU     0x02		; RB2
-ENABLE          EQU     0x07		; RB7
+; Port C
+
+MOTOR_ENABLE_P  EQU     PORTC
+MOTOR_ENABLE    EQU     RC0         ; output
+MODE_SW_P       EQU     PORTC
+MODE_SW         EQU     RC1         ; input
+JOG_UP_SW_P     EQU     PORTC
+JOG_UP_SW       EQU     RC2         ; input
+MOTOR_DIR_P     EQU     PORTC
+MOTOR_DIR       EQU     RC3         ; output
+MOTOR_STEP_P    EQU     PORTC
+MOTOR_STEP      EQU     RC4         ; output
+LO_LIMIT_P      EQU     PORTC
+LO_LIMIT		EQU     RC5         ; input ~ cutting current low limit
+MOTOR_MODE_P    EQU     PORTC
+MOTOR_MODE      EQU     RC6         ; output ~ motor step size selection
+SELECT_SW_P     EQU     PORTC
+SELECT_SW       EQU     RC7         ; input ~ select switch
+
+; Button State Flags
+
+SELECT_SW_STATE     EQU     0
+JOG_UP_SW_STATE     EQU     1
+JOG_DWN_SW_STATE    EQU     2
+MODE_SW_STATE       EQU     3
 
 ; end of Hardware Definitions
 ;--------------------------------------------------------------------------------------------------
@@ -302,7 +346,7 @@ WALL_MODE       EQU     0x3
 DATA_MODIFIED   EQU     0x4
 UPDATE_DISPLAY  EQU     0x5
 UPDATE_DIR_SYM  EQU     0x6
-MOTOR_DIR		EQU     0x7
+MOTOR_DIR_MODE	EQU     0x7
 
 ; bits in LCDFlags
 
@@ -356,13 +400,13 @@ BLINK_ON_FLAG			EQU		0x01
     menuOption              ; tracks which menu option is currently selected
 
     buttonState                  
-                            ; bit 3: 0 = Reset/Zero/Enter button pressed
-                            ; bit 4: 0 = Jog Up button pressed
-                            ; bit 5: 0 = Jog Down button pressed
-                            ; bit 6: 0 = Mode button active
+                            ; bit 0: 0 = Select/Reset/Zero/Enter button pressed
+                            ; bit 1: 0 = Jog Up button pressed
+                            ; bit 2: 0 = Jog Down button pressed
+                            ; bit 3: 0 = Mode button switched to Setup mode
 
     buttonPrev              ; state of buttons the last time they were scanned
-                            ; bit assignments same as for buttons
+                            ; bit assignments same as for buttonState
 
     eepromAddress		    ; use to specify address to read or write from EEprom
     eepromCount	        	; use to specify number of bytes to read or write from EEprom
@@ -658,6 +702,14 @@ menuLoop:
 
 setup:
 
+    call    setupClock      ; set system clock source and frequency
+
+    call    setupPortA      ; prepare Port A for I/O
+
+    call    setupPortB      ; prepare Port B for I/O
+
+    call    setupPortC      ; prepare Port C  for I/O
+
 ;start of hardware configuration
 
     movlw   0               ;high byte of indirect addressing pointers -> 0
@@ -666,53 +718,25 @@ setup:
 
     clrf    INTCON          ; disable all interrupts
                             
-    movlw   0x7             ; turn off comparator, PortA pins set for I/O
-;wip mks -- Updated code from PIC16F648A to PIC16F1459 -- register no longer valid.
-;    movwf   CMCON           ; 7 -> Comparator Control Register - see note in function header
-;
-
-    movlw   0xff
-    movwf   PORTB           ; 0xff -> Port B
-    movlb   1               ; select bank 1
-    movlw   0x78
-    movwf   TRISB           ; 0x78 -> TRISB = PortB I/O 0111 1000 (1=input, 0=output)
-    movlb   0               ; select bank 0
-    movlw   0xff
-    movwf   PORTA           ; 0xff -> Port A
-    movlb   1               ; select bank 1
-    movlw   0x38
-    movwf   TRISA           ; 0x38 -> TRISA = PortA I/O 0011 1000 (1=input, 0=output)
-
     movlw   0x58
     movwf   OPTION_REG      ; Option Register = 0x58   0101 1000 b
-                            ; bit 7 = 0 : PORTB pull-ups are enabled by individual port latch values
-                            ; bit 6 = 1 : RBO/INT interrupt on rising edge
+                            ; bit 7 = 0 : weak pull-ups are enabled by individual port latch values
+                            ; bit 6 = 1 : interrupt on rising edge
                             ; bit 5 = 0 : TOCS ~ Timer 0 run by internal instruction cycle clock (CLKOUT ~ Fosc/4)
                             ; bit 4 = 1 : TOSE ~ Timer 0 increment on high-to-low transition on RA4/T0CKI/CMP2 pin (not used here)
 							; bit 3 = 1 : PSA ~ Prescaler assigned to WatchDog; Timer0 will be 1:1 with Fosc/4
                             ; bit 2 = 0 : Bits 2:0 control prescaler:
                             ; bit 1 = 0 :    000 = 1:2 scaling for Timer0 (if assigned to Timer0)
                             ; bit 0 = 0 :
-
-    movlb   0               ; select bank 0
-    movlw   0x3
-    movwf   PORTA           ; 0x3 -> Port A: LCD Ctrl=1, Rough/Fine Ctrl=1, EDMPwerSply Ctrl=0
-    movlw   0xff
-    movwf   PORTB           ; 0xff -> Port B: MotorStep=1, MotorDir=1, MotorMode=1, MotorEnab=1
-
-	bcf     PORTB,STEPSIZE  ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
-							; see notes at top of page for more info
     
 ;end of hardware configuration
+
+    call    initializeOutputs
 
     movlw   0x3
     movwf   scratch1
     movlw   0xe8
     call    bigDelayA       ; delay
-
-    bcf     EDM,POWER_ON    ;  turn off the cutting voltage
-    
-    bcf     EDM,ROUGH_FINE  ; select Rough EDM voltage duty cycle
     
     movlw   position3
     call    zeroQuad        ; clear the position variable
@@ -741,7 +765,7 @@ setup:
 
     ; reset some values to a default state
     ; leave WALL_MODE as read from eeprom - this state is saved
-	; leave MOTOR_DIR as read from eeprom - this state is saved
+	; leave MOTOR_DIR_MODE as read from eeprom - this state is saved
 
     bcf     flags,EXTENDED_MODE
     bcf     flags,CUT_STARTED
@@ -774,8 +798,8 @@ setup:
 	;the user adjusts the spark level to force a save of the new values over the 0xff in EEprom
 	call    saveSparkLevelsToEEprom
 
-    bcf     flags,WALL_MODE		; default to notch mode
-    bcf     flags,MOTOR_DIR		; default to normal motor direction
+    bcf     flags,WALL_MODE         ; default to notch mode
+    bcf     flags,MOTOR_DIR_MODE    ; default to normal motor direction
 
 	call	saveFlagsToEEprom	; save the new defaults
 
@@ -824,13 +848,200 @@ noClearDepth:
 
     movlb   0               ; select bank 0
 
-    bcf     MOTOR,ENABLE    ; enable the motor
+    bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
 
     call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
 
     return
 
 ; end of setup
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; initializeOutputs
+;
+; Initializes all outputs to known values.
+;
+
+initializeOutputs:
+
+    banksel SERIAL_OUT_P
+    bsf     SERIAL_OUT_P,SERIAL_OUT
+
+    banksel POWER_ON_P
+    bcf     POWER_ON_P, POWER_ON
+
+    banksel MOTOR_STEP_P
+    bsf     MOTOR_STEP_P, MOTOR_STEP
+
+    banksel MOTOR_DIR_P
+    bsf     MOTOR_DIR_P, MOTOR_DIR
+
+    banksel MOTOR_ENABLE_P              ; disable the motor
+    bsf     MOTOR_ENABLE_P, MOTOR_ENABLE
+
+    banksel MOTOR_MODE_P
+	bcf     MOTOR_MODE_P, MOTOR_MODE    ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
+                                        ; see notes at top of page for more info
+
+    return
+
+; end of initializeOutpus
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupClock
+;
+; Saves the flags value to eeprom.
+;
+; Sets up the system clock source and frequency.
+;
+; Assumes clock related configuration bits are set as follows:
+;
+;   _FOSC_INTOSC,  _CPUDIV_NOCLKDIV, _PLLMULT_4x, _PLLEN_DISABLED
+;
+; Assumes all programmable clock related options are at Reset default values.
+;
+
+setupClock:
+
+    ; choose internal clock frequency of 16 Mhz
+
+    banksel OSCCON
+
+    bsf     OSCCON, IRCF0
+    bsf     OSCCON, IRCF1
+    bsf     OSCCON, IRCF2
+    bsf     OSCCON, IRCF3
+
+    return
+
+; end of setupClock
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPortA
+;
+; Sets up Port A for I/O operation.
+;
+; NOTE: Writing to PORTA is same as writing to LATA for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+; NOTE: RA0, RA1 and RA3 can only be inputs on the PIC16f1459 device. 
+;       RA2, RA6, RA7 are not implemented.
+;
+
+setupPortA:
+
+    banksel WPUA
+    movlw   b'00000000'                 ; disable weak pull-ups
+    movwf   WPUA
+
+    banksel PORTA
+    clrf    PORTA                       ; init port value
+
+    banksel LATA                        ; init port data latch
+    clrf    LATA
+
+    banksel ANSELA
+    clrf    ANSELA                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISA
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISA
+
+    bsf     TRISA, SERIAL_IN            ; input
+    bsf     TRISA, SHORT_DETECT         ; input
+    bsf     TRISA, HI_LIMIT             ; input
+    bcf     TRISA, POWER_ON             ; output
+
+    return
+
+; end of setupPortA
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPortB
+;
+; Sets up Port B for I/O operation.
+;
+; NOTE: Writing to PORTB is same as writing to LATB for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+; NOTE: RB0, RB1, RB2, RB3 are not implemented on the PIC16f1459 device.
+;
+
+setupPortB:
+
+    banksel WPUB
+    movlw   b'00000000'                 ; disable weak pull-ups
+    movwf   WPUB
+
+    banksel PORTB
+    clrf    PORTB                       ; init port value
+
+    banksel LATB                       ; init port data latch
+    clrf    LATB
+
+    banksel ANSELB
+    clrf    ANSELB                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISB
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISB
+
+    bsf     TRISB, JOG_DWN_SW           ; input
+    bcf     TRISB, SERIAL_OUT           ; input
+
+    return
+
+; end of setupPortB
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPort
+;
+; Sets up Port C for I/O operation.
+;
+; NOTE: Writing to PORTC is same as writing to LATC for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+
+setupPortC:
+
+    ; Port C does not have a weak pull-up register
+
+    banksel PORTC
+    clrf    PORTC                       ; init port value
+
+    banksel LATC                        ; init port data latch
+    clrf    LATC
+
+    banksel ANSELC
+    clrf    ANSELC                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISC
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISC
+
+    bcf     TRISC, MOTOR_ENABLE         ; output
+    bsf     TRISC, MODE_SW              ; input
+    bsf     TRISC, JOG_UP_SW            ; input
+    bcf     TRISC, MOTOR_DIR            ; output
+    bcf     TRISC, MOTOR_STEP           ; output
+    bsf     TRISC, LO_LIMIT             ; input
+    bcf     TRISC, MOTOR_MODE           ; output
+    bsf     TRISC, SELECT_SW            ; input
+
+    return
+
+; end of setupPortC
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -939,14 +1150,10 @@ handleTimer0Interrupt:
 
 doLCD:
 
-    movlb   1               ; select data bank 1 to access LCD buffer variables
-
-LCDBusyCheck:
+    banksel LCDFlags        ; select data bank 1 to access LCD buffer variables
 
     btfss   LCDFlags,LCDBusy    
     goto    endISR          ; if nothing in buffer, exit
-
-inDelayCheck:
 
     btfss   LCDFlags,inDelay    ; if in delay phase, waste time until counter is zero
     goto    startBitCheck       ;  (this delay is necessary between words, but is used
@@ -976,11 +1183,12 @@ startBitCheck:
     btfss   LCDFlags,startBit   ; if set, initiate a startbit and exit    
     goto    stopBitCheck
 
-    movlb   0                   ; select bank 0
+    banksel SERIAL_OUT_P
 
-    bcf     LCD,TDATA           ; transmit start bit (low)
-    movlb   1                   ; select bank 1
-    
+    bcf     SERIAL_OUT_P,SERIAL_OUT ; transmit start bit (low)
+
+    banksel LCDFlags
+
     bcf     LCDFlags,startBit   ; start bit done
     movlw   .8
     movwf   LCDBitCount         ; prepare to send 8 bits starting with next interrupt
@@ -991,9 +1199,11 @@ stopBitCheck:
     btfss   LCDFlags,stopBit    ; if set, initiate a stopbit and exit
     goto    transmitByteT0I
 
-    movlb   0                   ; select bank 0
-    bsf     LCD,TDATA           ; transmit stop bit (high)
-    movlb   1                   ; select bank 1
+    banksel SERIAL_OUT_P
+
+    bsf     SERIAL_OUT_P, SERIAL_OUT           ; transmit stop bit (high)
+
+    banksel LCDFlags
     
     bcf     LCDFlags,stopBit    ; stop bit done
     
@@ -1011,12 +1221,14 @@ transmitByteT0I:
     movwf   FSR0L           ; point FSR at the character
     rlf     INDF0,F         ; get the first bit to transmit
 
-    movlb   0               ; select bank 0
-    bcf     LCD,TDATA       ; set data line low first (brief low if bit is to be a one will be
-                            ;  ignored by receiver)
+    banksel SERIAL_OUT_P
+
+    bcf     SERIAL_OUT_P,SERIAL_OUT ; set data line low first (brief low if bit is to be a one will
+                                    ; be ignored by receiver)
     btfsc   STATUS,C
-    bsf     LCD,TDATA       ; set high if bit was a 1
-    movlb   1               ; select bank 1
+    bsf     SERIAL_OUT_P,SERIAL_OUT ; set high if bit was a 1
+
+    banksel LCDFlags
 
 endOfByteCheck:
 
@@ -1124,17 +1336,17 @@ skipSB1:
 
 ;test each port input and set button_state to match
 
-    btfsc   BUTTONS,RESET_BTN
-    bsf     buttonState,RESET_BTN
+    btfsc   SELECT_SW_P,SELECT_SW
+    bsf     buttonState,SELECT_SW_STATE
 
-    btfsc   BUTTONS,JOG_UP
-    bsf     buttonState,JOG_UP
+    btfsc   JOG_UP_SW_P,JOG_UP_SW
+    bsf     buttonState,JOG_UP_SW_STATE
 
-    btfsc   BUTTONS,JOG_DWN
-    bsf     buttonState,JOG_DWN
+    btfsc   JOG_DWN_SW_P,JOG_DWN_SW
+    bsf     buttonState,JOG_DWN_SW_STATE
 
-    btfsc   BUTTONS,MODE
-    bsf     buttonState,MODE
+    btfsc   MODE_SW_P,MODE_SW
+    bsf     buttonState,MODE_SW_STATE
 
     return
 
@@ -1578,11 +1790,11 @@ doMainMenuPage2A:			; call here if first option has already been set by caller
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
 
-    movlw   .20              ; "5 - Motor Dir " or "5 - Motor Dir "
+    movlw   .20             ; "5 - Motor Dir " or "5 - Motor Dir "
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
-    btfsc  	flags,MOTOR_DIR  ; check for reverse motor direction ;
+    btfsc  	flags,MOTOR_DIR_MODE    ; check for reverse motor direction
 	goto	revDirDMMP2
 
     movlw   .22             ; add "Normal" suffix to motor dir line
@@ -1636,18 +1848,18 @@ skipDMMP21:
 
     ; handle option 5 - Motor Direction Change (menuOption value is 2)
 
-    btfss	flags,MOTOR_DIR		; motor direction is reverse?
+    btfss	flags,MOTOR_DIR_MODE    ; motor direction is reverse?
 	goto	skipDMMP23
 
-	bcf		flags,MOTOR_DIR		; set motor direction to normal
-	call    saveFlagsToEEprom   ; save the new setting to EEprom
-    goto    doMainMenuPage2		; refresh menu
+	bcf		flags,MOTOR_DIR_MODE    ; set motor direction to normal
+	call    saveFlagsToEEprom       ; save the new setting to EEprom
+    goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP23:
 
-	bsf		flags,MOTOR_DIR		; set motor direction to reverse
-    call    saveFlagsToEEprom   ; save the new setting to EEprom
-    goto    doMainMenuPage2		; refresh menu
+	bsf		flags,MOTOR_DIR_MODE	; set motor direction to reverse
+    call    saveFlagsToEEprom       ; save the new setting to EEprom
+    goto    doMainMenuPage2         ; refresh menu
     
 skipDMMP24:
 
@@ -1732,13 +1944,13 @@ cutNotch:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    bsf     EDM,POWER_ON    ; turn on the cutting voltage
+    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
 
 cutLoop:
 
-    bsf     EDM,POWER_ON    ; turn on the cutting voltage repeatedly
-                            ; (this is a hack fix because the pin seems to get set low by electrical noise)
-							; (may not be true for properly grounded PCBs with high voltage caps in place)
+    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage repeatedly
+                    ; (this is a hack fix because the pin seems to get set low by electrical noise)
+                    ; (may not be true for properly grounded PCBs with high voltage caps in place)
 
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
@@ -1746,7 +1958,7 @@ cutLoop:
     btfsc   flags,AT_DEPTH  ; displayPosLUCL sets flags:AT_DEPTH if depth reached and time to exit
     goto    exitCN
 
-    btfss   BUTTONS,RESET_BTN
+    btfss   SELECT_SW_P,SELECT_SW
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
 
@@ -1759,10 +1971,10 @@ cutLoop:
 
 checkUPDWNButtons:
 
-    btfss   BUTTONS,JOG_UP
+    btfss   JOG_UP_SW_P,JOG_UP_SW
     call    adjustSpeedUp   ; increment the speed (sparkLevel) value
 
-    btfss   BUTTONS,JOG_DWN
+    btfss   JOG_DWN_SW_P,JOG_DWN_SW
     call    adjustSpeedDown ; decrement the speed (sparkLevel) value
 
 checkHiLimit:
@@ -1795,7 +2007,7 @@ checkLoLimit:
 
 notchModeCN:                        ; next two lines for notch mode
       
-    btfss   COMPARATOR,LO_LIMIT     ; bit set if voltage too low (current too high)
+    btfss   LO_LIMIT_P,LO_LIMIT     ; bit set if voltage too low (current too high)
     goto    cutLoop
     goto    moveUpLUCL              ; time to retract
 
@@ -1831,7 +2043,7 @@ moveUpLUCL:
 
 quickRetractCN:
 
-    btfss   BUTTONS,RESET_BTN
+    btfss   SELECT_SW_P,SELECT_SW
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
@@ -1868,7 +2080,7 @@ skipDirSymUpdateCN:
 
     movlb   0                       ; select bank 0
 
-    btfsc   COMPARATOR,LO_LIMIT     ; check again, loop quickly until current is within
+    btfsc   LO_LIMIT_P,LO_LIMIT     ; check again, loop quickly until current is within
     goto    quickRetractCN          ; limits to avoid glow plugging
     
     goto    cutLoop
@@ -1923,7 +2135,7 @@ checkPositionCN:
 
 exitCN:
 
-    bcf     EDM,POWER_ON    ; turn off the cutting voltage
+    bcf     POWER_ON_P,POWER_ON    ; turn off the cutting voltage
 
     call    waitLCD         ; wait until buffer printed
 
@@ -2031,7 +2243,7 @@ cycleTest:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    bsf     EDM,POWER_ON    ; turn on the cutting voltage
+    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
 
     movlw   0x3
     movwf   scratch1
@@ -2048,19 +2260,19 @@ restartCycleCT:
 
 cycleLoopCT:
 
-    bsf     EDM,POWER_ON    ; turn on the cutting voltage repeatedly
+    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage repeatedly
                             ; (this is a hack fix because the pin seems to get set low by electrical noise)
 							; (may not be true for properly grounded PCBs with high voltage caps in place)
 
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
 
-    btfss   BUTTONS,RESET_BTN
+    btfss   SELECT_SW_P,SELECT_SW
     goto    exitCT          ; exit the notch cutting mode if the reset button pressed
 
 checkHiLimitCT:
 
-    btfss   COMPARATOR,HI_LIMIT     ; is voltage too high? (current too low, not touching yet)
+    btfss   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low, not touching yet)
     goto    upCycleCT             	; voltage drop - blade touching - begin up cycle
 									; unlike the cutNotch function, the blade never sits still
 
@@ -2111,7 +2323,7 @@ upCycleCT:
 
 quickRetractCT:
 
-    btfss   BUTTONS,RESET_BTN
+    btfss   SELECT_SW_P,SELECT_SW
     goto    exitCT          ; exit the notch cutting mode if the reset button pressed
 
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
@@ -2165,7 +2377,7 @@ skipDirSymUpdateCT:
 	
 exitCT:
 
-    bcf     EDM,POWER_ON    ; turn off the cutting voltage
+    bcf     POWER_ON_P,POWER_ON    ; turn off the cutting voltage
 
     call    waitLCD         ; wait until buffer printed
 
@@ -2192,7 +2404,7 @@ exitCT:
 
 sparkTimer:
 
-    btfss   COMPARATOR,HI_LIMIT     ; is voltage too high? (current too low)
+    btfss   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low)
     goto    noAdvanceST             ; voltage is good, don't advance
 
 ; check the advance timer
@@ -2251,7 +2463,7 @@ noAdvanceST:
 
 overCurrentTimer:
 
-    btfss   COMPARATOR,LO_LIMIT     ; is voltage too low? (current too high)
+    btfss   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
     goto    noRetractOCT            ; voltage is good, don't retract
 
 ; check the retract timer
@@ -2416,9 +2628,9 @@ saveSparkLevelsToEEprom:
 
 pulseMotorDownWithDelay:
 
-    bsf     MOTOR,DIR_SEL       ; motor down for normal direction option
-	btfsc	flags,MOTOR_DIR		; is motor direction option reverse?
-    bcf     MOTOR,DIR_SEL		; motor up for reverse direction option
+    bsf     MOTOR_DIR_P,MOTOR_DIR       ; motor down for normal direction option
+	btfsc	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
+    bcf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for reverse direction option
 
 	goto	pulseMotorWithDelay
 
@@ -2436,9 +2648,9 @@ pulseMotorDownWithDelay:
 
 pulseMotorUpWithDelay:
 
-    bcf     MOTOR,DIR_SEL      	; motor up for normal direction option
-	btfsc	flags,MOTOR_DIR		; is motor direction option reverse?
-    bsf     MOTOR,DIR_SEL		; motor up for reverse direction option
+    bcf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for normal direction option
+	btfsc	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
+    bsf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for reverse direction option
 	goto	pulseMotorWithDelay
 
 ; end of pulseMotorUpWithDelay
@@ -2479,19 +2691,19 @@ pulseMotorWithDelay:
     movlw   .15             ; see notes in header regarding this value (use .15 for normal head)
     call    bigDelayA
 
-    bcf     MOTOR,STEP
+    bcf     MOTOR_STEP_P,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR,STEP      ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     return
 
 pulseMotorNoDelay:
 
-    bcf     MOTOR,STEP
+    bcf     MOTOR_STEP_P,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR,STEP      ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     return
 
@@ -2628,7 +2840,7 @@ loopSCM:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP
+    btfsc   buttonState,JOG_UP_SW_STATE
     goto    skip_upSCM      ; skip if Up switch not pressed
 
 ; jog up button press    
@@ -2640,7 +2852,7 @@ loopSCM:
 
 skip_upSCM:
 
-    btfsc   buttonState,JOG_DWN
+    btfsc   buttonState,JOG_DWN_SW_STATE
     goto    skip_dwnSCM     ; skip if Down switch not pressed
 
 ; jog down button press
@@ -2652,7 +2864,7 @@ skip_upSCM:
 
 skip_dwnSCM:
 
-    btfsc   buttonState,RESET_BTN
+    btfsc   buttonState,SELECT_SW_STATE
     goto    loopSCM             ; loop without updating display if no button pressed
 
 ; set sparkLevel to value for Notch or Wall mode depending on current mode
@@ -2690,7 +2902,7 @@ loopABD:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP
+    btfsc   buttonState,JOG_UP_SW_STATE
     goto    skip_upABD      ; skip if Up switch not pressed
 
 ; jog up button press    
@@ -2711,7 +2923,7 @@ loopABD:
 
 skip_upABD:
 
-    btfsc   buttonState,JOG_DWN
+    btfsc   buttonState,JOG_DWN_SW_STATE
     goto    skip_dwnABD    ; skip if Down switch not pressed
 
 ; jog down button press
@@ -2732,7 +2944,7 @@ skip_upABD:
 
 skip_dwnABD:
 
-    btfsc   buttonState,RESET_BTN
+    btfsc   buttonState,SELECT_SW_STATE
     goto    loopABD        ; loop if Reset/Select switch not pressed
 
 ; reset/enter/zero button press - digit finished, so exit
@@ -2809,30 +3021,30 @@ jogMode:
     movlw   0xff
     call    bigDelayA       ; delay - give user chance to release button
 
-    bsf     EDM,POWER_ON    ; turn on the cutting voltage
+    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
     
 loopJM:
 
     call    scanButtonsQ    ; monitor user input - Q entry point for short delay so motor runs
                             ; faster
 
-    btfsc   buttonState,JOG_UP
+    btfsc   buttonState,JOG_UP_SW_STATE
     goto    chk_dwnJM       ; skip if Up switch not pressed
 
 ; jog up button press    
 
-    bcf     MOTOR,DIR_SEL       ; motor up for normal direction option
-	btfsc	flags,MOTOR_DIR		; is motor direction option reverse?
-    bsf     MOTOR,DIR_SEL		; motor up for reverse direction option
+    bcf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for normal direction option
+	btfsc	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
+    bsf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for reverse direction option
 
     nop
     nop
     nop
 
-    bcf     MOTOR,STEP
+    bcf     MOTOR_STEP_P,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR,STEP      ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     movlw   position3
     call    decBCDVar       ; going up decrements the position
@@ -2841,23 +3053,23 @@ loopJM:
 
 chk_dwnJM:
 
-    btfsc   buttonState,JOG_DWN
+    btfsc   buttonState,JOG_DWN_SW_STATE
     goto    not_dwnJM      ; skip if Down switch not pressed
 
 ; jog down button press
 
-    bsf     MOTOR,DIR_SEL       ; motor down for normal direction option
-	btfsc	flags,MOTOR_DIR		; is motor direction option reverse?
-    bcf     MOTOR,DIR_SEL		; motor up for reverse direction option
+    bsf     MOTOR_DIR_P,MOTOR_DIR   ; motor down for normal direction option
+	btfsc	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
+    bcf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for reverse direction option
 
     nop
     nop
     nop
 
-    bcf     MOTOR,STEP
+    bcf     MOTOR_STEP_P,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR,STEP      ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     movlw   position3
     call    incBCDVar       ; going down increments the position
@@ -2866,13 +3078,13 @@ chk_dwnJM:
 
 not_dwnJM:
 
-    btfsc   buttonState,RESET_BTN
+    btfsc   buttonState,SELECT_SW_STATE
     goto    loopJM          ; loop if Reset/Select switch not pressed
 
 ; reset/enter/zero button press
 
-    btfsc   BUTTONS,MODE    ; in Setup mode?
-    goto    exitJM          ; exit Jog Mode if not when Reset/Enter/Zero button pressed
+    btfsc   MODE_SW_P,MODE_SW   ; in Setup mode?
+    goto    exitJM              ;exit Jog Mode if not when Select button pressed
 
 ; removed because this was a pain - better to be able to zero after a cut - can start a new
 ; cut this way without powering down
@@ -2900,8 +3112,8 @@ updateJM:
     movf    setupDelay,W
     call    bigDelayA
 
-    btfsc   BUTTONS,MODE    ; in Setup mode?
-    goto    noExtraDelayJM	; extra pause if not in setup speed mode to slow down the head
+    btfsc   MODE_SW_P,MODE_SW   ; in Setup mode?
+    goto    noExtraDelayJM      ; extra pause if not in setup speed mode to slow down the head
 
     movlw   0x0             ; delay extra in normal speed mode
     movwf   scratch1
@@ -2932,7 +3144,7 @@ displayJM:
 
 exitJM:
 
-    bcf     EDM,POWER_ON    ;  turn off the cutting voltage
+    bcf     POWER_ON_P,POWER_ON    ;  turn off the cutting voltage
 
     call    waitLCD         ; wait until buffer printed
 
@@ -3038,7 +3250,7 @@ loopHMMI:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP
+    btfsc   buttonState,JOG_UP_SW_STATE
     goto    skip_upHMMI     ; skip if Up switch not pressed
 
     call    selectHigherOption  ; adjusts menu_option to reflect new selection
@@ -3047,7 +3259,7 @@ loopHMMI:
 
 skip_upHMMI:
 
-    btfsc   buttonState,JOG_DWN
+    btfsc   buttonState,JOG_DWN_SW_STATE
     goto    skip_dwnHMMI    ; skip if Down switch not pressed
 
     movf    scratch4,W          ; maximum number of options
@@ -3057,7 +3269,7 @@ skip_upHMMI:
 
 skip_dwnHMMI:
 
-    btfsc   buttonState,RESET_BTN
+    btfsc   buttonState,SELECT_SW_STATE
     goto    loopHMMI        ; loop if Reset/Select switch not pressed
 
     return                  ; return when Reset/Enter/Zero button pressed
