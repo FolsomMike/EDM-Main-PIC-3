@@ -2007,7 +2007,7 @@ checkLoLimit:
 
 notchModeCN:                        ; next two lines for notch mode
       
-    btfss   LO_LIMIT_P,LO_LIMIT     ; bit set if voltage too low (current too high)
+    btfsc   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
     goto    cutLoop
     goto    moveUpLUCL              ; time to retract
 
@@ -2080,7 +2080,7 @@ skipDirSymUpdateCN:
 
     movlb   0                       ; select bank 0
 
-    btfsc   LO_LIMIT_P,LO_LIMIT     ; check again, loop quickly until current is within
+    btfss   LO_LIMIT_P,LO_LIMIT     ; check again, loop quickly until current is within
     goto    quickRetractCN          ; limits to avoid glow plugging
     
     goto    cutLoop
@@ -2272,7 +2272,7 @@ cycleLoopCT:
 
 checkHiLimitCT:
 
-    btfss   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low, not touching yet)
+    btfsc   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low, not touching yet)
     goto    upCycleCT             	; voltage drop - blade touching - begin up cycle
 									; unlike the cutNotch function, the blade never sits still
 
@@ -2404,7 +2404,7 @@ exitCT:
 
 sparkTimer:
 
-    btfss   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low)
+    btfsc   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low)
     goto    noAdvanceST             ; voltage is good, don't advance
 
 ; check the advance timer
@@ -2463,7 +2463,7 @@ noAdvanceST:
 
 overCurrentTimer:
 
-    btfss   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
+    btfsc   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
     goto    noRetractOCT            ; voltage is good, don't retract
 
 ; check the retract timer
