@@ -33,7 +33,7 @@
         <targetDevice>PIC16F1459</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
-        <platformTool>PICkit3PlatformTool</platformTool>
+        <platformTool>Simulator</platformTool>
         <languageToolchain>MPASMWIN</languageToolchain>
         <languageToolchainVersion>5.53</languageToolchainVersion>
         <platform>3</platform>
@@ -71,8 +71,8 @@
         <property key="hex-output-format" value="INHX32"/>
         <property key="map-file" value="${DISTDIR}/${PROJECTNAME}.${IMAGE_TYPE}.map"/>
       </MPASMWIN-LD>
-      <PICkit3PlatformTool>
-      </PICkit3PlatformTool>
+      <Simulator>
+      </Simulator>
       <mpasmsuite>
         <property key="absolute-mode" value="false"/>
         <property key="eeprom-width" value="8"/>
