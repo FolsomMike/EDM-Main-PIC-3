@@ -350,7 +350,7 @@ MODE_SW_STATE       EQU     3
 ; chip A2-A0 inputs = 001 (bits 3-1)
 ; R/W bit set to 0 (bit 0)
 
-DIGITAL_POT1_WRITE_ID       EQU     0b10100010
+DIGITAL_POT1_WRITE_ID       EQU     b'10100010'
 
 HI_LIMIT_POT_ADDR           EQU     0x0
 LO_LIMIT_POT_ADDR           EQU     0x1
@@ -363,8 +363,8 @@ CURRENT_MONITOR_POT_ADDR    EQU     0x3
 ; R/W bit set to 0 (bit 0) for writing
 ; R/W bit set to 1 (bit 0) for reading
 
-EEPROM1_WRITE_ID            EQU     0b10100000
-EEPROM1_READ_ID             EQU     0b10100001
+EEPROM1_WRITE_ID            EQU     b'10100000'
+EEPROM1_READ_ID             EQU     b'10100001'
 
 
 ; end of Hardware Definitions
@@ -997,6 +997,8 @@ setupPortA:
     movlw   b'11111111'                 ; first set all to inputs
     movwf   TRISA
 
+    ; set direction for each pin used
+
     bsf     TRISA, SERIAL_IN            ; input
     bsf     TRISA, SHORT_DETECT         ; input
     bsf     TRISA, HI_LIMIT             ; input
@@ -1027,7 +1029,7 @@ setupPortB:
     banksel PORTB
     clrf    PORTB                       ; init port value
 
-    banksel LATB                       ; init port data latch
+    banksel LATB                        ; init port data latch
     clrf    LATB
 
     banksel ANSELB
@@ -1040,7 +1042,7 @@ setupPortB:
     movwf   TRISB
 
     bsf     TRISB, JOG_DWN_SW           ; input
-    bcf     TRISB, SERIAL_OUT           ; input
+    bcf     TRISB, SERIAL_OUT           ; output
 
     return
 
@@ -1100,28 +1102,28 @@ setDigitalPots:
     banksel scratch0
     movlw   HI_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   200
+    movlw   .200
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   LO_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   255
+    movlw   .255
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   VOLTAGE_MONITOR_POT_ADDR
     movwf   scratch0
-    movlw   127
+    movlw   .127
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   CURRENT_MONITOR_POT_ADDR
     movwf   scratch0
-    movlw   127
+    movlw   .127
     movwf   scratch1
     call    setDigitalPotInChip1
 
@@ -2884,7 +2886,7 @@ endSD:
 
     movlw   depth3          ; address in RAM
     movwf   FSR0L
-    clrf   eepromAddressH
+    clrf    eepromAddressH
     movlw   eeDepth3        ; address in EEprom
     movwf   eepromAddressL
     movlw   .4
@@ -3393,7 +3395,7 @@ selectHigherOption:
 
 ; reached end of options
 
-    movlw   1
+    movlw   .1
     movwf   menuOption      ; don't allow option less than 1
 
 	bsf     menuOption,7	; set bit 7 to show that user attempted to move curser
@@ -3409,7 +3411,7 @@ selectHigherOption:
 
 moveCursorSHO:
 
-    movlw    0xd4
+    movlw   0xd4
     subwf   cursorPos,W     ; is cursor at 0xd4?
     btfss   STATUS,Z    
     goto    line2SHO
@@ -3423,7 +3425,7 @@ moveCursorSHO:
 
 line2SHO:
 
-    movlw    0x94
+    movlw   0x94
     subwf   cursorPos,W     ; is cursor at 0x94?
     btfss   STATUS,Z    
     goto    line3SHO
@@ -3437,7 +3439,7 @@ line2SHO:
 
 line3SHO:
 
-    movlw    0xc0
+    movlw   0xc0
     subwf   cursorPos,W     ; is cursor at 0xc0?
     btfss   STATUS,Z    
     goto    line4SHO
@@ -3504,7 +3506,7 @@ selectLowerOption:
 
 moveCursorSLO:
 
-    movlw    0x80
+    movlw   0x80
     subwf   cursorPos,W     ; is cursor at 0x80?
     btfss   STATUS,Z    
     goto    line2SLO
@@ -3518,7 +3520,7 @@ moveCursorSLO:
 
 line2SLO:
 
-    movlw    0xc0
+    movlw   0xc0
     subwf   cursorPos,W     ; is cursor at 0xc0?
     btfss   STATUS,Z    
     goto    line3SLO
@@ -3532,7 +3534,7 @@ line2SLO:
 
 line3SLO:
 
-    movlw    0x94
+    movlw   0x94
     subwf   cursorPos,W     ; is cursor at 0x94?
     btfss   STATUS,Z    
     goto    line4SLO
@@ -3689,9 +3691,8 @@ loopIZ1:
 
 SetBank0ClrWDT:
 
-    movlw   0               ;high byte of indirect addressing pointers -> 0
-    movwf   FSR0H
-    movwf   FSR1H
+    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
+    clrf   FSR1H
 
     banksel flags
 
@@ -4062,7 +4063,7 @@ incBCDAbs:
     addlw   .3              ; point to digit 0
     movwf   FSR0L           ; point FSR to variable
 
-    movlw   1
+    movlw   .1
     addwf   INDF0,F         ; add one to digit 0
     movlw   .10
     subwf   INDF0,W          ; compare with 9
@@ -4071,8 +4072,8 @@ incBCDAbs:
 
     clrf    INDF0           ; wraps to 0 after 9
     
-    decf   FSR0L,F          ; digit 1
-    movlw   1
+    decf    FSR0L,F          ; digit 1
+    movlw   .1
     addwf   INDF0,F         ; add one to digit 1
     movlw   .10
     subwf   INDF0,W         ; compare with 9
@@ -4082,7 +4083,7 @@ incBCDAbs:
     clrf    INDF0           ; wraps to 0 after 9
 
     decf    FSR0L,F         ; digit 2
-    movlw   1
+    movlw   .1
     addwf   INDF0,F         ; add one to digit 2
     movlw   .10
     subwf   INDF0,W         ; compare with 9
@@ -4092,7 +4093,7 @@ incBCDAbs:
     clrf    INDF0           ; wraps to 0 after 9
 
     decf    FSR0L,F         ; digit 3
-    movlw   1
+    movlw   .1
     addwf   INDF0,F         ; add one to digit 3
     movlw   .10
     subwf   INDF0,W         ; compare with 9
@@ -4595,7 +4596,7 @@ loopWTE1:
 
 setDigitalPotInChip1:
 
-    call    clearSP1IF              ; make sure flag is cleared before starting
+    call    clearSSP1IF             ; make sure flag is cleared before starting
 
     call    generateI2CStart
 
@@ -4603,18 +4604,18 @@ setDigitalPotInChip1:
     call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
 
     banksel scratch0                ; send the address of the pot in the chip to access
-    movf    scratch0
+    movf    scratch0,W
     call    sendI2CByte
 
     banksel scratch1                ; send the pot value
-    movf    scratch1
+    movf    scratch1,W
     call    sendI2CByte
 
-    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
 
     call    generateI2CStop
 
-    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
 
     return
 
@@ -4632,7 +4633,7 @@ setDigitalPotInChip1:
 
 writeByteToEEprom1ViaI2C:
 
-    call    clearSP1IF              ; make sure flag is cleared before starting
+    call    clearSSP1IF             ; make sure flag is cleared before starting
 
     call    generateI2CStart
 
@@ -4640,22 +4641,22 @@ writeByteToEEprom1ViaI2C:
     call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
 
     banksel eepromAddressH          ; send the address high byte
-    movf    eepromAddressH
+    movf    eepromAddressH,W
     call    sendI2CByte
 
     banksel eepromAddressL          ; send the address low byte
-    movf    eepromAddressL
+    movf    eepromAddressL,W
     call    sendI2CByte
 
     banksel scratch0                ; send the byte to be written
-    movf    scratch0
+    movf    scratch0,W
     call    sendI2CByte
 
-    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
 
     call    generateI2CStop
 
-    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
 
     return
 
@@ -4672,12 +4673,12 @@ writeByteToEEprom1ViaI2C:
 ;
 ; To read a byte from the EEprom, the source address is first set by using a write command. A
 ; restart condition is then generated and the byte read using a read command.
-; After the read, a NACK is sent to the host followed by a stop condition.
+; After the read, a NACK is sent to the slave followed by a stop condition.
 ;
 
 readByteFromEEprom1ViaI2C:
 
-    call    clearSP1IF              ; make sure flag is cleared before starting
+    call    clearSSP1IF             ; make sure flag is cleared before starting
 
     call    generateI2CStart
 
@@ -4685,29 +4686,29 @@ readByteFromEEprom1ViaI2C:
     call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
 
     banksel eepromAddressH          ; send the address high byte
-    movf    eepromAddressH
+    movf    eepromAddressH,W
     call    sendI2CByte
 
     banksel eepromAddressL          ; send the address low byte
-    movf    eepromAddressL
+    movf    eepromAddressL,W
     call    sendI2CByte
 
-    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
 
     call    generateI2CRestart
 
     movlw   EEPROM1_READ_ID        ; send proper ID to write to EEprom 1
     call    sendI2CByte            ; send byte in W register via I2C bus after SP1IF goes high
 
-    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHigh      ; wait for high flag upon transmission completion
 
     banksel SSPCON2
     bcf     SSPCON2,RCEN
 
-    call    waitForSP1IFHigh        ; wait for high flag upon reception completion
+    call    waitForSSP1IFHigh       ; wait for high flag upon reception completion
 
     banksel SSP1BUF                 ; store the received byte in scratch0
-    movf    SSP1BUF
+    movf    SSP1BUF,W
     banksel scratch0
     movwf   scratch0
 
@@ -4715,14 +4716,14 @@ readByteFromEEprom1ViaI2C:
     bsf     SSPCON2,ACKDT           ; send high bit (NACK)
     bsf     SSPCON2,ACKEN           ; enable NACK transmission
 
-    call    waitForSP1IFHigh        ; wait for high flag upon NACK transmission complete
+    call    waitForSSP1IFHigh       ; wait for high flag upon NACK transmission complete
 
     banksel SSPCON2
-    bcf     SSPCON2,ACKDT           ; reset to send ACks
+    bcf     SSPCON2,ACKDT           ; reset to send ACKs
 
     call    generateI2CStop
 
-    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
 
     return
 
@@ -4741,29 +4742,29 @@ readByteFromEEprom1ViaI2C:
 
 waitForEEprom1WriteCycleFinished:
 
-
 wfewcf1:
 
-    call    clearSP1IF              ; make sure flag is cleared before starting
+    call    clearSSP1IF             ; make sure flag is cleared before starting
 
     call    generateI2CStart
 
     movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1
     call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
 
-    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
+
+    call    clearSSP1IF
+
+    ; abort the write operation regardless of success
+    ; it was only used to check for ACK from slave
+
+    call    generateI2CStop
+
+    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
 
     banksel SSPCON2
     btfsc   SSPCON2,ACKSTAT         ; check for low ACK from slave, repeat loop if NACK
     goto    wfewcf1
-
-    ; abort the write operation -- it was only used to check for ACK from slave
-
-    call    clearSP1IF
-
-    call    generateI2CStop
-
-    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
 
     return
 
@@ -4819,28 +4820,28 @@ generateI2CStop:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; clearSP1IF
+; clearSSP1IF
 ;
 ; Sets the SSP1IF bit in register PIR1 to 0.
 ;
 
-clearSP1IF:
+clearSSP1IF:
 
     banksel PIR1
     bcf     PIR1, SSP1IF
 
     return
 
-; end of clearSP1IF
+; end of clearSSP1IF
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; waitForSP1IFHigh
+; waitForSSP1IFHigh
 ;
 ; Waits in a loop for SSP1IF bit in register PIR1 to go high.
 ;
 
-waitForSP1IFHigh:
+waitForSSP1IFHigh:
 
     ifdef debug       ; if debugging, don't wait for interrupt to be set high as the MSSP is not
     return;           ; simulated by the IDE
@@ -4854,7 +4855,7 @@ wfsh1:
 
     return
 
-; end of waitForSP1IFHigh
+; end of waitForSSP1IFHigh
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4868,16 +4869,16 @@ sendI2CByte:
 
     ; wait for SSP1IF to go high
 
-    call    waitForSP1IFHigh
+    call    waitForSSP1IFHigh
 
-    ; transmit the byte
+    ; put byte in transmit buffer
 
     banksel SSPBUF
     movwf   SSPBUF
 
     ; clear interrupt flag
 
-    call    clearSP1IF
+    call    clearSSP1IF
 
     return
 
