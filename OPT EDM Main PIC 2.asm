@@ -182,7 +182,7 @@
 ; RC6   Out - Motor Mode Step Size - (Microstep Select Full/Half/Quarter/Eighth)
 ; RC7   In  - Select Switch
 ;
-;end of Control Control Description
+;end of Hardware Control Description
 ;--------------------------------------------------------------------------------------------------
 ;
 ; User Inputs
@@ -196,6 +196,20 @@
 ; Select button used to accept an entry or selection, stop a function, or return to a menu.
 ;  (also referred to as "Reset" on the schematic and "Zero Reset" on wiring harness"
 ;
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; Defines
+;
+
+; COMMENT OUT "#define debug" line before using code in system.
+; Defining debug will insert code which simplifies simulation by skipping code which waits on
+; stimulus and performing various other actions which make the simulation run properly.
+; Search for "ifdef debug" to find all examples of such code.
+
+#define debug 1     ; set debug testing "on"
+
+; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -331,6 +345,28 @@ JOG_UP_SW_STATE     EQU     1
 JOG_DWN_SW_STATE    EQU     2
 MODE_SW_STATE       EQU     3
 
+; I2C bus ID byte for writing to digital pot 1
+; upper nibble = 1010 (bits 7-4)
+; chip A2-A0 inputs = 001 (bits 3-1)
+; R/W bit set to 0 (bit 0)
+
+DIGITAL_POT1_WRITE_ID       EQU     0b10100010
+
+HI_LIMIT_POT_ADDR           EQU     0x0
+LO_LIMIT_POT_ADDR           EQU     0x1
+VOLTAGE_MONITOR_POT_ADDR    EQU     0x2
+CURRENT_MONITOR_POT_ADDR    EQU     0x3
+
+; I2C bus ID bytes for writing and reading to EEprom 1
+; upper nibble = 1010 (bits 7-4)
+; chip A2-A0 inputs = 000 (bits 3-1)
+; R/W bit set to 0 (bit 0) for writing
+; R/W bit set to 1 (bit 0) for reading
+
+EEPROM1_WRITE_ID            EQU     0b10100000
+EEPROM1_READ_ID             EQU     0b10100001
+
+
 ; end of Hardware Definitions
 ;--------------------------------------------------------------------------------------------------
 
@@ -408,7 +444,8 @@ BLINK_ON_FLAG			EQU		0x01
     buttonPrev              ; state of buttons the last time they were scanned
                             ; bit assignments same as for buttonState
 
-    eepromAddress		    ; use to specify address to read or write from EEprom
+    eepromAddressL		    ; use to specify address to read or write from EEprom
+    eepromAddressH          ; high byte
     eepromCount	        	; use to specify number of bytes to read or write from EEprom
 
     speedValue              ; stores sparkLevel converted to a single digit
@@ -710,14 +747,18 @@ setup:
 
     call    setupPortC      ; prepare Port C  for I/O
 
+    call    setupI2CMaster7BitTransmitMode ; prepare the I2C serial bus for use
+
+    call    setDigitalPots  ; set digital pot values to stored values
+
 ;start of hardware configuration
 
-    movlw   0               ;high byte of indirect addressing pointers -> 0
-    movwf   FSR0H
-    movwf   FSR1H
+    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
+    clrf   FSR1H
 
     clrf    INTCON          ; disable all interrupts
-                            
+
+    banksel OPTION_REG
     movlw   0x58
     movwf   OPTION_REG      ; Option Register = 0x58   0101 1000 b
                             ; bit 7 = 0 : weak pull-ups are enabled by individual port latch values
@@ -732,6 +773,8 @@ setup:
 ;end of hardware configuration
 
     call    initializeOutputs
+
+    banksel flags
 
     movlw   0x3
     movwf   scratch1
@@ -757,8 +800,9 @@ setup:
 
     movlw   flags           ; address in RAM
     movwf   FSR0L
+    clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .1
     movwf   eepromCount     ; read 4 bytes
     call    readFromEEprom
@@ -778,8 +822,9 @@ setup:
 
     movlw   sparkLevelNotch     ; address in RAM
     movwf   FSR0L
+    clrf    eepromAddressH
     movlw   eeSparkLevelNotch   ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .2
     movwf   eepromCount         ; read 4 bytes
     call    readFromEEprom
@@ -816,8 +861,9 @@ noDefaultEEpromValues:
 
     movlw   depth3          ; address in RAM
     movwf   FSR0L
+    clrf    eepromAddressH
     movlw   eeDepth3        ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; read 4 bytes
     call    readFromEEprom
@@ -833,7 +879,7 @@ noClearDepth:
 
     ; set up the LCD buffer variables
 
-    movlb   1               ; select bank 1
+    banksel LCDFlags
 
     clrf    LCDFlags        
     movlw   LCDBuffer0
@@ -846,8 +892,7 @@ noClearDepth:
     bsf     INTCON,T0IE     ; enable TMR0 interrupts
     bsf     INTCON,GIE      ; enable all interrupts
 
-    movlb   0               ; select bank 0
-
+    banksel MOTOR_ENABLE_P
     bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
 
     call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
@@ -1045,6 +1090,47 @@ setupPortC:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; setDigitalPots
+;
+; Sets the digital pot values to their stored settings.
+;
+
+setDigitalPots:
+
+    banksel scratch0
+    movlw   HI_LIMIT_POT_ADDR
+    movwf   scratch0
+    movlw   200
+    movwf   scratch1
+    call    setDigitalPotInChip1
+
+    banksel scratch0
+    movlw   LO_LIMIT_POT_ADDR
+    movwf   scratch0
+    movlw   255
+    movwf   scratch1
+    call    setDigitalPotInChip1
+
+    banksel scratch0
+    movlw   VOLTAGE_MONITOR_POT_ADDR
+    movwf   scratch0
+    movlw   127
+    movwf   scratch1
+    call    setDigitalPotInChip1
+
+    banksel scratch0
+    movlw   CURRENT_MONITOR_POT_ADDR
+    movwf   scratch0
+    movlw   127
+    movwf   scratch1
+    call    setDigitalPotInChip1
+
+    return
+
+; end of setDigitalPots
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; saveFlagsToEEprom
 ;
 ; Saves the flags value to eeprom.
@@ -1054,8 +1140,9 @@ saveFlagsToEEprom:
 
     movlw   flags           ; address in RAM
     movwf   FSR0L
+    clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .1
     movwf   eepromCount     ; write 1 byte
     call    writeToEEprom
@@ -1137,7 +1224,7 @@ handleTimer0Interrupt:
 
 	bcf 	INTCON,T0IF     ; clear the Timer0 overflow interrupt flag
 
-    movlb   0               ; select bank 0
+    banksel debounce0
 
     movf    debounce0,W		; if debounce counter is zero, don't decrement it
     iorwf   debounce1,W
@@ -2058,11 +2145,11 @@ quickRetractCN:
 
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCN
-    movlb   1                       ; switch to bank 1 to access LCDFlags
+    banksel LCDFlags
     btfsc   LCDFlags,LCDBusy
 	goto    skipDirSymUpdateCN
- 
-    movlb   0                       ; switch back to main variables RAM page
+
+    banksel flags
 	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
  
     movlw   0xc0
@@ -2078,7 +2165,7 @@ quickRetractCN:
 
 skipDirSymUpdateCN:
 
-    movlb   0                       ; select bank 0
+    banksel LO_LIMIT_P
 
     btfss   LO_LIMIT_P,LO_LIMIT     ; check again, loop quickly until current is within
     goto    quickRetractCN          ; limits to avoid glow plugging
@@ -2087,7 +2174,7 @@ skipDirSymUpdateCN:
 
 displayPosLUCL:             		; updates the display if it is time to do so
 
-    movlb   1                       ; switch RAM page to access LCDFlags
+    banksel LCDFlags
 
     btfss   LCDFlags,LCDBusy
     goto    displayCN
@@ -2095,7 +2182,7 @@ displayPosLUCL:             		; updates the display if it is time to do so
 
 displayCN:
 
-    movlb   0                       ; select bank 0 for main variables
+    banksel flags
 
     bcf     flags,UPDATE_DISPLAY 	; clear flag so no update until data changed again
 
@@ -2122,7 +2209,7 @@ displayCN:
 
 checkPositionCN:
 
-    movlb   0                       ; select bank 0 for main variables
+    banksel depth3
 
     movlw   depth3
     call    isPosGtYQ
@@ -2339,12 +2426,12 @@ quickRetractCT:
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCT
 
-    movlb   1                       ; select bank 1 for LCDFlags
+    banksel LCDFlags
 
     btfsc   LCDFlags,LCDBusy
 	goto    skipDirSymUpdateCT
- 
-    movlb   0                       ; select bank 0 for main variables
+
+    banksel flags
 	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
  
     movlw   0xc0
@@ -2360,7 +2447,7 @@ quickRetractCT:
 
 skipDirSymUpdateCT:
 
-    movlb   0               ; select bank 0 for main variables
+    banksel debug0
 
 	; user counter to return blade to original start position
 
@@ -2606,8 +2693,9 @@ saveSparkLevelsToEEprom:
 
     movlw   sparkLevelNotch     ; address in RAM
     movwf   FSR0L
+    clrf    eepromAddressH
     movlw   eeSparkLevelNotch   ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .2
     movwf   eepromCount         ; write 2 bytes
     call    writeToEEprom
@@ -2796,8 +2884,9 @@ endSD:
 
     movlw   depth3          ; address in RAM
     movwf   FSR0L
+    clrf   eepromAddressH
     movlw   eeDepth3        ; address in EEprom
-    movwf   eepromAddress
+    movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; write 4 bytes
     call    writeToEEprom
@@ -3122,17 +3211,19 @@ updateJM:
 
 noExtraDelayJM:
 
-    movlb   1               ; select bank 1
+    banksel LCDFlags
 
     btfss   LCDFlags,LCDBusy
     goto    displayJM
-    movlb   0               ; select bank 0
+
+    banksel flags
 
     goto    loopJM          ; don't display if print buffer not ready      
 
 displayJM:
 
-    movlb   0               ; select bank 0
+    banksel flags
+
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
@@ -3602,9 +3693,10 @@ SetBank0ClrWDT:
     movwf   FSR0H
     movwf   FSR1H
 
-    movlb   0               ;bank 0 for direct addressing
+    banksel flags
 
     clrwdt                  ;keep watchdog from triggering
+
     return
 
 ;end of SetBank0ClrWDT
@@ -4193,14 +4285,14 @@ flushLCD:
 
 ; prepare the interrupt routine for printing
 
-    movlb   1               ; select bank 1
+    banksel LCDBuffer0
 
     movlw   LCDBuffer0
     movwf   LCDBufferPtr
     bsf     LCDFlags,startBit
     bsf     LCDFlags,LCDBusy    ; set this bit last to make sure everything set up before interrupt
 
-    movlb   0               ; select bank 0
+    banksel flags
 
     return
 
@@ -4215,14 +4307,14 @@ flushLCD:
 
 waitLCD:
 
-    movlb   1               ; select bank 1
+    banksel LCDFlags
 
 loopWBL1:                   ; loop until interrupt routine finished writing character
 
     btfsc   LCDFlags,LCDBusy
     goto    loopWBL1
 
-    movlb   0               ; select bank 0
+    banksel flags
 
     return
 
@@ -4402,7 +4494,7 @@ writeWordLCD:
 
 writeByteLCD:
 
-    movlb   1               ; select bank 1
+    banksel LCDScratch0
 
     movwf   LCDScratch0     ; store character
 
@@ -4416,7 +4508,7 @@ writeByteLCD:
     incf    LCDBufferCnt,F  ; count characters placed in the buffer
     incf    LCDBufferPtr,F  ; point to next buffer position
 
-    movlb   0               ; select bank 0
+    banksel flags
 
     return    
 
@@ -4428,40 +4520,30 @@ writeByteLCD:
 ; 
 ; Read block of bytes from EEprom.
 ;
-; Address in EEprom from which to read first byte should be in eepromAddress.
+; Address in EEprom from which to read first byte should be in eepromAddressH/L.
 ; Number of bytes to read should be in eepromCount.
-; Indirect register (FSR) should point to first byte in RAM to be written into.
+; Indirect register FSR0 should point to first byte in RAM to be written into.
 ; The block of bytes will be copied from EEprom to RAM.
-;
-; NOTE: This function must be modified for use with PIC16F876 - look for
-;  notes in the function referring to PIC16F876 for details
 ; 
 
 readFromEEprom:
 
 loopRFE1:
 
-	movf	eepromAddress,W	; load EEprom address from which to read
-	incf	eepromAddress,F	; move to next address in EEprom
+    call    readByteFromEEprom1ViaI2C
 
-    movlb   1               ; select bank 1 [for PIC16F648]
-    ;movlb   2               ; select bank 2 [for PIC16F876]
-	
-    ;movwf	EEADR			; place in EEprom read address register
+    banksel scratch0            ; store byte read to the buffer
+    movwf   scratch0
+    movwi   FSR0++
 
-	;movlb   3              ; select bank 3 [for PIC16F876]
-	;bcf    EECON1,EEPGD	; read from EEprom (as opposed to Flash) [for PIC16F876]
-	;bsf	    EECON1,RD		; perform EEProm read
+    banksel eepromAddressL
+	incf	eepromAddressL,F    ; move to next address in EEprom
+    btfsc   STATUS,Z
+	incf	eepromAddressH,F	; increment high byte on low byte rollover
 
-	;bcf	movlb   2	    ; select bank 2 [for PIC16F876]
-	;movf	EEDATA,W		; move data read into w
-	movwf   INDF0   		; write to RAM
-	incf	FSR0L,F			; move to next address in RAM
-
-    movlb   0               ; select bank 0
-
-	decfsz	eepromCount,F	; count down number of bytes transferred
-	goto	loopRFE1		; not zero yet - read more bytes
+    banksel eepromCount
+	decfsz	eepromCount,F       ; count down number of bytes transferred
+	goto	loopRFE1            ; not zero yet - transfer more bytes
 
 	return
 
@@ -4473,55 +4555,362 @@ loopRFE1:
 ;
 ; Writes block of bytes to EEprom.
 ;
-; Address in EEprom to store first byte should be in eepromAddress.
+; Address in EEprom to store first byte should be in eepromAddressH/L.
 ; Number of bytes to write should be in eepromCount.
-; Indirect register (FSR) should point to first byte in RAM to be written.
+; Indirect register FSR0 should point to first byte in RAM to be written.
 ; The block of bytes will be copied from RAM to EEprom.
 ;
 
 writeToEEprom:
 
 loopWTE1:	
-    
-    movf	eepromAddress,W	; load EEprom address at which to store
-	incf	eepromAddress,F	; move to next address in EEprom	
 
-    movlb   1       		; select bank 1 [for PIC16F648]
-    ;movlb   2      		; select bank 2 [for PIC16F876]
-	
-	;movwf	EEADR			; place in EEprom write address register
+    moviw   FSR0++              ; store byte to be written in scratch0
+    banksel scratch0
+    movwf   scratch0
 
-	movf	INDF0,W		; get first byte of block from RAM
-	incf	FSR0L,F			; move to next byte in RAM
-	;movwf	EEDATA			; store in EEprom write data register
+    call    writeByteToEEprom1ViaI2C
 
-	;movlb   3              ; select bank 3 [for PIC16F876]
-    ;bcf	EECON1,EEPGD	; write to EEprom (as opposed to Flash) [for PIC16F876]
-	;bsf	    EECON1,WREN		; enable EEprom write
-	bcf	    INTCON,GIE		; disable all interrupts
-	
-	movlw	0x55
-	;movwf	EECON2			; put 0x55 into EECON2
-	movlw	0xaa
-	;movwf	EECON2			; put 0xaa into EECON2
-	;bsf	    EECON1,WR	  	; begin the write process
+    banksel eepromAddressL
+	incf	eepromAddressL,F    ; move to next address in EEprom
+    btfsc   STATUS,Z
+	incf	eepromAddressH,F	; increment high byte on low byte rollover
 
-waitWTE1:	
-    
-    ;btfsc	EECON1,WR		; loop until WR bit goes low (write finished)
-	goto	waitWTE1
+    call    waitForEEprom1WriteCycleFinished
 
-	;bcf	EECON1,WREN		    ; disable writes
-	bsf	INTCON,GIE		    ; re-enable interrupts
-
-    movlb   0               ; select bank 0
-
-	decfsz	eepromCount,F	; count down number of bytes transferred
-	goto	loopWTE1        ; not zero yet - write more bytes
+    banksel eepromCount
+	decfsz	eepromCount,F       ; count down number of bytes transferred
+	goto	loopWTE1            ; not zero yet - trasfer more bytes
 
 	return
 
 ; end of writeToEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setDigitalPotInChip1
+;
+; Sets the pot specified by scratch0 in digital pot chip 1 to the value in scratch1.
+;
+
+setDigitalPotInChip1:
+
+    call    clearSP1IF              ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   DIGITAL_POT1_WRITE_ID   ; send proper ID to write to digital pot chip 1
+    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+
+    banksel scratch0                ; send the address of the pot in the chip to access
+    movf    scratch0
+    call    sendI2CByte
+
+    banksel scratch1                ; send the pot value
+    movf    scratch1
+    call    sendI2CByte
+
+    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+
+    call    generateI2CStop
+
+    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+
+    return
+
+; end of setDigitalPotInChip1
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; writeByteToEEprom1ViaI2C
+;
+; Writes a byte to EEprom1 via the I2C bus.
+;
+; The byte to be written should be in scratch0.
+; The EEprom target address wordk should be in eepromAddressL/H
+;
+
+writeByteToEEprom1ViaI2C:
+
+    call    clearSP1IF              ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1
+    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+
+    banksel eepromAddressH          ; send the address high byte
+    movf    eepromAddressH
+    call    sendI2CByte
+
+    banksel eepromAddressL          ; send the address low byte
+    movf    eepromAddressL
+    call    sendI2CByte
+
+    banksel scratch0                ; send the byte to be written
+    movf    scratch0
+    call    sendI2CByte
+
+    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+
+    call    generateI2CStop
+
+    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+
+    return
+
+; end of writeByteToEEprom1ViaI2C
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readByteFromEEprom1ViaI2C
+;
+; Reads a byte from EEprom1 via the I2C bus.
+;
+; The byte read will be returned in scratch0.
+; The EEprom source address wordk should be in eepromAddressL/H
+;
+; To read a byte from the EEprom, the source address is first set by using a write command. A
+; restart condition is then generated and the byte read using a read command.
+; After the read, a NACK is sent to the host followed by a stop condition.
+;
+
+readByteFromEEprom1ViaI2C:
+
+    call    clearSP1IF              ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1 (used to set address)
+    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+
+    banksel eepromAddressH          ; send the address high byte
+    movf    eepromAddressH
+    call    sendI2CByte
+
+    banksel eepromAddressL          ; send the address low byte
+    movf    eepromAddressL
+    call    sendI2CByte
+
+    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+
+    call    generateI2CRestart
+
+    movlw   EEPROM1_READ_ID        ; send proper ID to write to EEprom 1
+    call    sendI2CByte            ; send byte in W register via I2C bus after SP1IF goes high
+
+    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+
+    banksel SSPCON2
+    bcf     SSPCON2,RCEN
+
+    call    waitForSP1IFHigh        ; wait for high flag upon reception completion
+
+    banksel SSP1BUF                 ; store the received byte in scratch0
+    movf    SSP1BUF
+    banksel scratch0
+    movwf   scratch0
+
+    banksel SSPCON2                 ; send NACK to terminate read
+    bsf     SSPCON2,ACKDT           ; send high bit (NACK)
+    bsf     SSPCON2,ACKEN           ; enable NACK transmission
+
+    call    waitForSP1IFHigh        ; wait for high flag upon NACK transmission complete
+
+    banksel SSPCON2
+    bcf     SSPCON2,ACKDT           ; reset to send ACks
+
+    call    generateI2CStop
+
+    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+
+    return
+
+; end of readByteFromEEprom1ViaI2C
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForEEprom1WriteCycleFinished
+;
+; Waits for EEprom1 to finish its write cycle.
+;
+; The EEprom will not respond to a write command with an ACK during a write cycle, so a write
+; command is repeatedly sent until the EEprom responds with an ACK. A stop condition is then
+; generated to abort the write command.
+;
+
+waitForEEprom1WriteCycleFinished:
+
+
+wfewcf1:
+
+    call    clearSP1IF              ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1
+    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+
+    call    waitForSP1IFHigh        ; wait for high flag upon transmission completion
+
+    banksel SSPCON2
+    btfsc   SSPCON2,ACKSTAT         ; check for low ACK from slave, repeat loop if NACK
+    goto    wfewcf1
+
+    ; abort the write operation -- it was only used to check for ACK from slave
+
+    call    clearSP1IF
+
+    call    generateI2CStop
+
+    call    waitForSP1IFHigh        ; wait for high flag upon stop condition finished
+
+    return
+
+; end of waitForEEprom1WriteCycleFinished
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; generateI2CStart
+;
+; Generates a start condition on the I2C bus.
+;
+
+generateI2CStart:
+
+    banksel SSPCON2
+    bsf     SSPCON2,SEN
+
+    return
+
+; end of generateI2CStart
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; generateI2CRestart
+;
+; Generates a restart condition on the I2C bus.
+;
+
+generateI2CRestart:
+
+    banksel SSPCON2
+    bsf     SSPCON2,RSEN
+
+    return
+
+; end of generateI2CRestart
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; generateI2CStop
+;
+; Generates a stop condition on the I2C bus.
+;
+
+generateI2CStop:
+
+    banksel SSPCON2
+    bsf     SSPCON2,PEN
+
+    return
+
+; end of generateI2CStop
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; clearSP1IF
+;
+; Sets the SSP1IF bit in register PIR1 to 0.
+;
+
+clearSP1IF:
+
+    banksel PIR1
+    bcf     PIR1, SSP1IF
+
+    return
+
+; end of clearSP1IF
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForSP1IFHigh
+;
+; Waits in a loop for SSP1IF bit in register PIR1 to go high.
+;
+
+waitForSP1IFHigh:
+
+    ifdef debug       ; if debugging, don't wait for interrupt to be set high as the MSSP is not
+    return;           ; simulated by the IDE
+    endif
+
+    banksel PIR1
+
+wfsh1:
+    btfss   PIR1, SSP1IF
+    goto    wfsh1
+
+    return
+
+; end of waitForSP1IFHigh
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sendI2CByte
+;
+; Waits until the SSP1IF bit in register PIR1 goes high and then transmits the byte in the W
+; register on the I2C bus.
+;
+
+sendI2CByte:
+
+    ; wait for SSP1IF to go high
+
+    call    waitForSP1IFHigh
+
+    ; transmit the byte
+
+    banksel SSPBUF
+    movwf   SSPBUF
+
+    ; clear interrupt flag
+
+    call    clearSP1IF
+
+    return
+
+; end of sendI2CByte
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupI2CMaster7BitTransmitMode
+;
+; Sets the MASTER SYNCHRONOUS SERIAL PORT (MSSP) MODULE to the I2C Master Transmission mode using
+; the 7 bit address mode.
+;
+; NOTE: RB4 and RB6 must have been configured elswhere as inputs for this mode.
+;
+
+setupI2CMaster7BitTransmitMode:
+
+
+    movlw   0x27			; set baud rate at 100kHz for oscillator frequency of 16 Mhz
+    banksel SSPADD
+    movwf   SSPADD
+
+    banksel SSPCON1
+    bcf	SSPCON1,SSP1M0		; SSPM = b1000 ~ I2C Master mode, clock = FOSC / (4 * (SSPADD+1))(4)
+    bcf	SSPCON1,SSP1M1
+    bcf	SSPCON1,SSP1M2
+    bsf	SSPCON1,SSP1M3
+
+    bsf	SSPCON1,SSPEN		;enables the MSSP module
+
+    return
+
+; end setupI2CMaster7BitTransmitMode
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
