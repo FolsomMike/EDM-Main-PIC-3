@@ -796,17 +796,7 @@ setup:
     clrf    ratio_neg1
     clrf    ratio_neg0
 
-    ; read the value stored for flags from the EEProm
-
-    movlw   flags           ; address in RAM
-    movwf   FSR0L
-    clrf    eepromAddressH
-    movlw   eeFlags         ; address in EEprom
-
-    movwf   eepromAddressL
-    movlw   .1
-    movwf   eepromCount     ; read 4 bytes
-    call    readFromEEprom
+    call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
 
     ; reset some values to a default state
     ; leave WALL_MODE as read from eeprom - this state is saved
@@ -818,17 +808,7 @@ setup:
     bcf     flags,DATA_MODIFIED
     bcf     flags,UPDATE_DISPLAY
 
-    ; read the values stored for sparkLevelNotch and sparkLevelWall from the EEProm
-    ; note: these values must be kept contiguous in memory
-
-    movlw   sparkLevelNotch     ; address in RAM
-    movwf   FSR0L
-    clrf    eepromAddressH
-    movlw   eeSparkLevelNotch   ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount         ; read 4 bytes
-    call    readFromEEprom
+    call    readSparkLevelsFromEEprom
 
     movlw   0xff                ; if one of the values loaded from EEPROM is 0xff, value in EEprom
     subwf   sparkLevelNotch,W   ; has never been previously set so force values to default
@@ -858,16 +838,7 @@ noDefaultEEpromValues:
     movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
     movwf   sparkLevel          ; save the selected value
 
-    ; read the value stored for depth from the EEProm
-
-    movlw   depth3          ; address in RAM
-    movwf   FSR0L
-    clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .4
-    movwf   eepromCount     ; read 4 bytes
-    call    readFromEEprom
+    call    readDepthValueFromEEprom    ; read the value stored for depth from the EEProm
 
     movlw   0xff            ; if the depth value loaded from EEPROM is 0xff, value in EEprom
     subwf   depth3,W        ; has never been previously set so force depth to zero
@@ -1134,12 +1105,169 @@ setDigitalPots:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; readDepthValueFromEEprom
+;
+; Reads the user set cut depth value from eeprom. These are unpacked BCD digits.
+;
+; Each digit is checked for valid range of 0-9 and force to that range.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+;
+
+readDepthValueFromEEprom:
+
+    banksel depth3
+
+    movlw   depth3          ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eeDepth3        ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .4
+    movwf   eepromCount     ; read 4 bytes
+    call    readFromEEprom
+
+    ; check each digit for illegal BCD value (0-9)
+
+    movf    depth3,W
+    movwf   scratch0
+    call    applyBCDDigitLimits
+    movf    scratch0,W
+    movwf   depth3
+
+    movf    depth2,W
+    movwf   scratch0
+    call    applyBCDDigitLimits
+    movf    scratch0,W
+    movwf   depth2
+
+    movf    depth1,W
+    movwf   scratch0
+    call    applyBCDDigitLimits
+    movf    scratch0,W
+    movwf   depth1
+
+    movf    depth0,W
+    movwf   scratch0
+    call    applyBCDDigitLimits
+    movf    scratch0,W
+    movwf   depth0
+
+    return
+
+; end of readDepthValueFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; saveDepthValueToEEprom
+;
+; Saves the user set cut depth value from eeprom. These are BCD digits.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+;
+
+saveDepthValueToEEprom:
+
+    banksel depth3
+
+    movlw   depth3          ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eeDepth3        ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .4
+    movwf   eepromCount     ; write 4 bytes
+    call    writeToEEprom
+
+    return
+
+; end of saveDepthValueToEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readSparkLevelsFromEEprom
+;
+; Reads the spark Wall/Notch aggression/speed values from eeprom.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+;
+
+readSparkLevelsFromEEprom:
+
+    banksel sparkLevelNotch
+
+    movlw   sparkLevelNotch     ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eeSparkLevelNotch   ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .2
+    movwf   eepromCount         ; read 2 bytes
+    call    readFromEEprom
+
+    return
+
+; end of readSparkLevelsFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; saveSparkLevelsToEEprom
+;
+; Saves the spark Wall/Notch aggression/speed values to eeprom.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+
+saveSparkLevelsToEEprom:
+
+    banksel sparkLevelNotch
+
+    movlw   sparkLevelNotch     ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eeSparkLevelNotch   ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .2
+    movwf   eepromCount         ; write 2 bytes
+    call    writeToEEprom
+
+    return
+
+; end of saveSparkLevelsToEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readFlagsFromEEprom
+;
+; Reads the flags value from eeprom.
+;
+
+readFlagsFromEEprom:
+
+    banksel flags
+
+    movlw   flags           ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eeFlags         ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .1
+    movwf   eepromCount     ; read 1 byte
+    call    readFromEEprom
+
+    return
+
+; end of readFlagsFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; saveFlagsToEEprom
 ;
 ; Saves the flags value to eeprom.
 ;
 
 saveFlagsToEEprom:
+
+    banksel flags
 
     movlw   flags           ; address in RAM
     movwf   FSR0L
@@ -2684,31 +2812,6 @@ processValueAS:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; saveSparkLevelsToEEprom
-;
-; Saves sparkLevelNotch and sparkLevelWall to eeprom.
-;
-
-saveSparkLevelsToEEprom:
-
-    ; save the values stored for sparkLevelNotch and sparkLevelWall from the EEProm
-    ; note: these values must be kept contiguous in memory
-
-    movlw   sparkLevelNotch     ; address in RAM
-    movwf   FSR0L
-    clrf    eepromAddressH
-    movlw   eeSparkLevelNotch   ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount         ; write 2 bytes
-    call    writeToEEprom
-
-    return
-
-; end of saveSparkLevelsToEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; pulseMotorDownWithDelay
 ;
 ; Moves the motor down one click, delaying as necessary for proper motor operation.
@@ -2883,16 +2986,7 @@ loopSD:
 
 endSD:
 
-; save the value stored for depth in the EEProm
-
-    movlw   depth3          ; address in RAM
-    movwf   FSR0L
-    clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .4
-    movwf   eepromCount     ; write 4 bytes
-    call    writeToEEprom
+    call    saveDepthValueToEEprom  ; save the value stored for depth in the EEProm
 
     goto    setCutMode
 
@@ -3026,7 +3120,7 @@ skip_upABD:
     
     movlw   0xff            
     subwf   INDF0,W         ; check if less than 0
-    btfsS   STATUS,Z
+    btfss   STATUS,Z
     goto    updateABD       ; display the digit
 
     movlw   .9
@@ -4935,6 +5029,96 @@ setupI2CMaster7BitTransmitMode:
     return
 
 ; end setupI2CMaster7BitTransmitMode
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; applyASCIINumDigitLimits
+;
+; Limits an ASCII value in scratch0 between ASCII '0' and '9'.
+;
+; Compares the value in scratch0 with ASCII for '0' and '9'. If the value is less than that for
+; the '0' character, it is replaced with that value. If greater than the '9' value, it is replaced
+; with that value.
+;
+
+applyASCIINumDigitLimits:
+
+    banksel scratch0
+
+    movlw   0x30                        ; lower limit is ASCII for '0'
+    movwf   scratch1
+
+    movlw   0x39                        ; upper limit is ASCII for '9'
+    movwf   scratch2
+
+    goto    applyLimitsToByteValue
+
+; end applyASCIINumDigitLimits
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; applyBCDDigitLimits
+;
+; Limits an unpacked BCD value in scratch0 between 0 and 9.
+;
+; Compares the value in scratch0 with 0 and 9. If the value is less than that for
+; the 0, it is replaced with that value. If greater than 9, it is replaced
+; with that value.
+;
+
+applyBCDDigitLimits:
+
+    banksel scratch0
+
+    movlw   .0                           ; lower limit for unpacked BCD
+    movwf   scratch1
+
+    movlw   .9                           ; upper limit for unpacked BCD
+    movwf   scratch2
+
+    goto    applyLimitsToByteValue
+
+; end applyBCDDigitLimits
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; applyLimitsToByteValue
+;
+; Clips a value between a lower and upper limit.
+;
+; Compares the value in scratch0 with the lower limit in scratch1 and the upper limit in scratch2.
+;
+; If scratch0 < scratch1, scratch0 = scratch1
+; If scratch0 > scratch2, scratch0 = scratch2
+;
+
+applyLimitsToByteValue:
+
+    banksel scratch0
+
+    movf    scratch0,W          ; check if scratch0 greater than scratch2
+    subwf   scratch2,W
+    btfsc   STATUS,C
+    goto    notHigher
+
+    movf    scratch2,W          ; was greater than so replace scratch0 with scratch1
+    movwf   scratch0
+
+notHigher:
+
+    movf    scratch1,W          ; check if scratch0 less than scratch1
+    subwf   scratch0,W
+    btfsc   STATUS,C
+    goto    notLower
+
+    movf    scratch1,W          ; was less than so replace scratch0 with scratch1
+    movwf   scratch0
+
+notLower:
+
+    return
+
+; end applyLimitsToByteValue
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
