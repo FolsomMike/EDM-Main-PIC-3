@@ -4624,42 +4624,6 @@ setDigitalPotInChip1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; waitForSSP1Idle
-;
-; Waits until the Master Synchronous Serial Port is idle.
-; Attempting to use the port when it is not idle will cause it to lock up.
-;
-; WIP MKS -- this uses a crude time delay -- replace with ORing as described here:
-;
-; SSPSTAT bit 2 R/W: Read/Write bit information (I2C mode only)
-; This bit holds the R/W bit information following the last address match. This bit is only valid from the address match
-;    to the next Start bit, Stop bit, or not ACK bit.
-;In I2 C Master mode:
-; 1 = Transmit is in progress
-; 0 = Transmit is not in progress
-; OR-ing this bit with SEN, RSEN, PEN, RCEN or ACKEN will indicate if the MSSP is in Idle mode.
-;
-; Is WCOL bit getting set and locking up the MSSP? Will clearing the WCOL bit if it gets set
-; unlock th MSSP?
-;
-
-waitForSSP1Idle:
-
-    banksel scratch6
-    movlw   .50
-    movwf   scratch6
-
-wfsi1:
-
-    decfsz  scratch6
-    goto    wfsi1
-
-    return
-
-; end of waitForSSP1Idle
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; writeByteToEEprom1ViaI2C
 ;
 ; Writes a byte to EEprom1 via the I2C bus.
