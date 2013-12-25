@@ -802,6 +802,7 @@ setup:
     movwf   FSR0L
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
+
     movwf   eepromAddressL
     movlw   .1
     movwf   eepromCount     ; read 4 bytes
@@ -1130,42 +1131,6 @@ setDigitalPots:
     return
 
 ; end of setDigitalPots
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; waitForSSP1Idle
-;
-; Waits until the Master Synchronous Serial Port is idle.
-; Attempting to use the port when it is not idle will cause it to lock up.
-;
-; WIP MKS -- this uses a crude time delay -- replace with ORing as described here:
-;
-; SSPSTAT bit 2 R/W: Read/Write bit information (I2C mode only)
-; This bit holds the R/W bit information following the last address match. This bit is only valid from the address match
-;    to the next Start bit, Stop bit, or not ACK bit.
-;In I2 C Master mode:
-; 1 = Transmit is in progress
-; 0 = Transmit is not in progress
-; OR-ing this bit with SEN, RSEN, PEN, RCEN or ACKEN will indicate if the MSSP is in Idle mode.
-;
-; Is WCOL bit getting set and locking up the MSSP? Will clearing the WCOL bit if it gets set
-; unlock th MSSP?
-;
-
-waitForSSP1Idle:
-
-    banksel scratch6
-    movlw   .50
-    movwf   scratch6
-
-wfsi1:
-
-    decfsz  scratch6
-    goto    wfsi1
-
-    return
-
-; end of waitForSSP1Idle
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4647,17 +4612,51 @@ setDigitalPotInChip1:
     movf    scratch1,W
     call    sendI2CByte
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
 
     call    generateI2CStop
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
-
-    call    waitForSSP1Idle         ; must wait for idle before next access else MSSP locks up
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
 
     return
 
 ; end of setDigitalPotInChip1
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForSSP1Idle
+;
+; Waits until the Master Synchronous Serial Port is idle.
+; Attempting to use the port when it is not idle will cause it to lock up.
+;
+; WIP MKS -- this uses a crude time delay -- replace with ORing as described here:
+;
+; SSPSTAT bit 2 R/W: Read/Write bit information (I2C mode only)
+; This bit holds the R/W bit information following the last address match. This bit is only valid from the address match
+;    to the next Start bit, Stop bit, or not ACK bit.
+;In I2 C Master mode:
+; 1 = Transmit is in progress
+; 0 = Transmit is not in progress
+; OR-ing this bit with SEN, RSEN, PEN, RCEN or ACKEN will indicate if the MSSP is in Idle mode.
+;
+; Is WCOL bit getting set and locking up the MSSP? Will clearing the WCOL bit if it gets set
+; unlock th MSSP?
+;
+
+waitForSSP1Idle:
+
+    banksel scratch6
+    movlw   .50
+    movwf   scratch6
+
+wfsi1:
+
+    decfsz  scratch6
+    goto    wfsi1
+
+    return
+
+; end of waitForSSP1Idle
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4676,25 +4675,25 @@ writeByteToEEprom1ViaI2C:
     call    generateI2CStart
 
     movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1
-    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+    call    sendI2CByte             ; send byte in W register on I2C bus after SSP1IF goes high
 
-    banksel eepromAddressH          ; send the address high byte
+    banksel eepromAddressH          ; send the address high byte after SSP1IF goes high
     movf    eepromAddressH,W
     call    sendI2CByte
 
-    banksel eepromAddressL          ; send the address low byte
+    banksel eepromAddressL          ; send the address low byte after SSP1IF goes high
     movf    eepromAddressL,W
     call    sendI2CByte
 
-    banksel scratch0                ; send the byte to be written
+    banksel scratch0                ; send the byte to be written after SSP1IF goes high
     movf    scratch0,W
     call    sendI2CByte
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
 
     call    generateI2CStop
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
 
     return
 
@@ -4731,19 +4730,19 @@ readByteFromEEprom1ViaI2C:
     movf    eepromAddressL,W
     call    sendI2CByte
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
 
     call    generateI2CRestart
 
     movlw   EEPROM1_READ_ID        ; send proper ID to write to EEprom 1
     call    sendI2CByte            ; send byte in W register via I2C bus after SP1IF goes high
 
-    call    waitForSSP1IFHigh      ; wait for high flag upon transmission completion
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
 
     banksel SSPCON2
-    bcf     SSPCON2,RCEN
+    bsf     SSPCON2,RCEN
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon reception completion
+    call    waitForSSP1IFHighThenClearIt;    wait for high flag upon reception completion
 
     banksel SSP1BUF                 ; store the received byte in scratch0
     movf    SSP1BUF,W
@@ -4754,14 +4753,14 @@ readByteFromEEprom1ViaI2C:
     bsf     SSPCON2,ACKDT           ; send high bit (NACK)
     bsf     SSPCON2,ACKEN           ; enable NACK transmission
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon NACK transmission complete
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon NACK transmission complete
 
     banksel SSPCON2
     bcf     SSPCON2,ACKDT           ; reset to send ACKs
 
     call    generateI2CStop
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
 
     return
 
@@ -4789,16 +4788,14 @@ wfewcf1:
     movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1
     call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon transmission completion
-
-    call    clearSSP1IF
+    call    waitForSSP1IFHighThenClearIt; wait for high flag upon transmission completion
 
     ; abort the write operation regardless of success
     ; it was only used to check for ACK from slave
 
     call    generateI2CStop
 
-    call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
 
     banksel SSPCON2
     btfsc   SSPCON2,ACKSTAT         ; check for low ACK from slave, repeat loop if NACK
@@ -4894,6 +4891,30 @@ wfsh1:
     return
 
 ; end of waitForSSP1IFHigh
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForSSP1IFHighThenClearIt
+;
+; Waits in a loop for SSP1IF bit in register PIR1 to go high and then clears that bit.
+;
+; The bit must be cleared at some point after it is set before performing most actions with the I2C
+; but. In most cases, it can be cleared immediately for which this function is useful.
+;
+; If the bit is not cleared before an operation, then checking the bit immediately after the
+; operation will make it appear that the operation completed immediately and the code will not
+; wait until the MSSP module sets the bit after actual completion.
+;
+
+waitForSSP1IFHighThenClearIt:
+
+    call    waitForSSP1IFHigh
+
+    call    clearSSP1IF
+
+    return
+
+; end of waitForSSP1IFHighThenClearIt
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
