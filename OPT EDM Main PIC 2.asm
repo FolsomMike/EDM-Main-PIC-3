@@ -207,7 +207,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-#define debug 1     ; set debug testing "on"
+;#define debug 1     ; set debug testing "on"
 
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
@@ -747,6 +747,8 @@ setup:
 
     call    setupPortC      ; prepare Port C  for I/O
 
+    call    initializeOutputs
+
     call    setupI2CMaster7BitTransmitMode ; prepare the I2C serial bus for use
 
     call    setDigitalPots  ; set digital pot values to stored values
@@ -771,8 +773,6 @@ setup:
                             ; bit 0 = 0 :
     
 ;end of hardware configuration
-
-    call    initializeOutputs
 
     banksel flags
 
@@ -1050,7 +1050,7 @@ setupPortB:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; setupPort
+; setupPortC
 ;
 ; Sets up Port C for I/O operation.
 ;
@@ -1102,14 +1102,14 @@ setDigitalPots:
     banksel scratch0
     movlw   HI_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   .200
+    movlw   .100
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   LO_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   .255
+    movlw   .200
     movwf   scratch1
     call    setDigitalPotInChip1
 
@@ -1130,6 +1130,42 @@ setDigitalPots:
     return
 
 ; end of setDigitalPots
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForSSP1Idle
+;
+; Waits until the Master Synchronous Serial Port is idle.
+; Attempting to use the port when it is not idle will cause it to lock up.
+;
+; WIP MKS -- this uses a crude time delay -- replace with ORing as described here:
+;
+; SSPSTAT bit 2 R/W: Read/Write bit information (I2C mode only)
+; This bit holds the R/W bit information following the last address match. This bit is only valid from the address match
+;    to the next Start bit, Stop bit, or not ACK bit.
+;In I2 C Master mode:
+; 1 = Transmit is in progress
+; 0 = Transmit is not in progress
+; OR-ing this bit with SEN, RSEN, PEN, RCEN or ACKEN will indicate if the MSSP is in Idle mode.
+;
+; Is WCOL bit getting set and locking up the MSSP? Will clearing the WCOL bit if it gets set
+; unlock th MSSP?
+;
+
+waitForSSP1Idle:
+
+    banksel scratch6
+    movlw   .50
+    movwf   scratch6
+
+wfsi1:
+
+    decfsz  scratch6
+    goto    wfsi1
+
+    return
+
+; end of waitForSSP1Idle
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4616,6 +4652,8 @@ setDigitalPotInChip1:
     call    generateI2CStop
 
     call    waitForSSP1IFHigh       ; wait for high flag upon stop condition finished
+
+    call    waitForSSP1Idle         ; must wait for idle before next access else MSSP locks up
 
     return
 
