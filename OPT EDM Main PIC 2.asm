@@ -306,6 +306,15 @@ EXTENDED_RATIO0  EQU     0x37
 
 ;--------------------------------------------------------------------------------------------------
 ; Hardware Definitions
+;
+; NOTE: Need to change all output port definitions to the port latch instead as per the next
+; note...but all code needs to be examined because the latches are in a different bank and the
+; banksel commands need to be updated.
+; NOTE: All ports for outputs are defined as the latches for the port. Writing to the latches
+; avoids problems with the read-modify-write system of the PIC.
+;
+; For inputs, the port must be read.
+;
 
 ; Port A
 
@@ -789,10 +798,7 @@ setup:
 
     banksel flags
 
-    movlw   0x3
-    movwf   scratch1
-    movlw   0xe8
-    call    bigDelayA       ; delay
+    call    reallyBigDelay
     
     movlw   position3
     call    zeroQuad        ; clear the position variable
@@ -862,26 +868,29 @@ setup:
 ;
 ; Initializes all outputs to known values.
 ;
+; Write to port latches to avoid problems with read-modify-write when changing multiple outputs
+; in quick succession.
+;
 
 initializeOutputs:
 
-    banksel SERIAL_OUT_P
-    bsf     SERIAL_OUT_P,SERIAL_OUT
+    banksel LATB
+    bsf     LATB,SERIAL_OUT
 
-    banksel POWER_ON_P
-    bcf     POWER_ON_P, POWER_ON
+    banksel LATA
+    bcf     LATA, POWER_ON
 
-    banksel MOTOR_STEP_P
-    bsf     MOTOR_STEP_P, MOTOR_STEP
+    banksel LATC
+    bsf     LATC, MOTOR_STEP
 
-    banksel MOTOR_DIR_P
-    bsf     MOTOR_DIR_P, MOTOR_DIR
+    banksel LATC
+    bsf     LATC, MOTOR_DIR
 
-    banksel MOTOR_ENABLE_P              ; disable the motor
-    bsf     MOTOR_ENABLE_P, MOTOR_ENABLE
+    banksel LATC              ; disable the motor
+    bsf     LATC, MOTOR_ENABLE
 
-    banksel MOTOR_MODE_P
-	bcf     MOTOR_MODE_P, MOTOR_MODE    ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
+    banksel LATC
+	bcf     LATC, MOTOR_MODE    ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
                                         ; see notes at top of page for more info
 
     return
@@ -5129,6 +5138,45 @@ notLower:
     return
 
 ; end applyLimitsToByteValue
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; reallyBigDelay
+;
+; Delays for a second or two.
+;
+
+reallyBigDelay:
+
+    banksel scratch6
+
+    movlw   .50
+    movwf   scratch6
+
+rbd1:
+
+    movlw   .255
+    movwf   scratch7
+
+rbd2:
+
+    movlw   .255
+    movwf   scratch8
+
+rbd3:
+
+    decfsz  scratch8
+    goto    rbd3
+
+    decfsz  scratch7
+    goto    rbd2
+
+    decfsz  scratch6
+    goto    rbd1
+
+    return
+
+; end of reallyBigDelay
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
