@@ -209,6 +209,19 @@
 
 ;#define debug 1     ; set debug testing "on"
 
+
+; Values for the digital pot settings.
+;
+; Each count equals approximately 0.0196V when power is at +5V
+;
+
+HI_CURRENT_LIMIT_POT    EQU     .104    ; tweak for 2.0 Volts
+LO_CURRENT_LIMIT_POT    EQU     .94     ; tweak for 1.8 Volts
+
+
+VOLTAGE_MONITOR_POT     EQU     .127    ; not currently used -- manual pot is used instead
+CURRENT_MONITOR_POT     EQU     .127    ; not currently used -- manual pot is used instead
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -810,27 +823,6 @@ setup:
 
     call    readSparkLevelsFromEEprom
 
-    movlw   0xff                ; if one of the values loaded from EEPROM is 0xff, value in EEprom
-    subwf   sparkLevelNotch,W   ; has never been previously set so force values to default
-    btfss   STATUS,Z
-    goto    noDefaultEEpromValues
-
-    movlw   0x51                ; default the values
-    movwf   sparkLevelNotch
-    movlw   0x11                ; wip mks => 0x21
-    movwf   sparkLevelWall
-    
-	;need to save to EEprom or flag values will be set back to default on each restart until
-	;the user adjusts the spark level to force a save of the new values over the 0xff in EEprom
-	call    saveSparkLevelsToEEprom
-
-    bcf     flags,WALL_MODE         ; default to notch mode
-    bcf     flags,MOTOR_DIR_MODE    ; default to normal motor direction
-
-	call	saveFlagsToEEprom	; save the new defaults
-
-noDefaultEEpromValues:
-
     ; set sparkLevel to value loaded for Notch or Wall mode depending on current mode
 
     movf    sparkLevelNotch,W   ; use Notch mode value if in Wall Reduction mode
@@ -839,15 +831,6 @@ noDefaultEEpromValues:
     movwf   sparkLevel          ; save the selected value
 
     call    readDepthValueFromEEprom    ; read the value stored for depth from the EEProm
-
-    movlw   0xff            ; if the depth value loaded from EEPROM is 0xff, value in EEprom
-    subwf   depth3,W        ; has never been previously set so force depth to zero
-    btfss   STATUS,Z
-    goto    noClearDepth
-    movlw   depth3
-    call    zeroQuad        ; clear the depth variable - no need to save to eeprom
-
-noClearDepth:
 
     ; set up the LCD buffer variables
 
@@ -1074,28 +1057,28 @@ setDigitalPots:
     banksel scratch0
     movlw   HI_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   .100
+    movlw   HI_CURRENT_LIMIT_POT
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   LO_LIMIT_POT_ADDR
     movwf   scratch0
-    movlw   .200
+    movlw   LO_CURRENT_LIMIT_POT
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   VOLTAGE_MONITOR_POT_ADDR
     movwf   scratch0
-    movlw   .127
+    movlw   VOLTAGE_MONITOR_POT
     movwf   scratch1
     call    setDigitalPotInChip1
 
     banksel scratch0
     movlw   CURRENT_MONITOR_POT_ADDR
     movwf   scratch0
-    movlw   .127
+    movlw   CURRENT_MONITOR_POT
     movwf   scratch1
     call    setDigitalPotInChip1
 
@@ -1204,6 +1187,27 @@ readSparkLevelsFromEEprom:
     movlw   .2
     movwf   eepromCount         ; read 2 bytes
     call    readFromEEprom
+
+    ; apply limits to the values to prevent illegal values read from eeprom
+
+    banksel scratch0
+
+    movlw   0x01                        ; lower limit
+    movwf   scratch1
+    movlw   0x81                        ; upper limit
+    movwf   scratch2
+
+    movf    sparkLevelNotch,W           ; limit notch spark level value
+    movwf   scratch0
+    call    applyLimitsToByteValue
+    movf    scratch0,W                  ; update variable with clipped value
+    movwf   sparkLevelNotch
+
+    movf    sparkLevelWall,W            ; limit wall spark level value
+    movwf   scratch0
+    call    applyLimitsToByteValue
+    movf    scratch0,W                  ; update variable with clipped value
+    movwf   sparkLevelWall
 
     return
 
@@ -2730,6 +2734,10 @@ noRetractOCT:
 ;
 ; Uses W, speedValue, sparkLevel, sparkLevelNotch, sparkLevelWall
 ;
+; speedValue contains 1-9 to represent sparkLevel 0x01-0x81
+;
+; In actual use, the sparkLevel is used as the upper byte of the actual value: sparkLevel:0x01
+;
 
 adjustSpeedUp:
 
@@ -3710,7 +3718,9 @@ loopDBV1:
 ;
 ; On exit:
 ;
-; sparkValue contains 1-9 to represent sparkLevel 0x01-0x81 (upper byte of 0x0101 to 0x8101)
+; speedValue contains 1-9 to represent sparkLevel 0x01-0x81
+;
+; In actual use, the sparkLevel is used as the upper byte of the actual value: sparkLevel:0x01
 ;
 ; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, sparkValue
 ;
