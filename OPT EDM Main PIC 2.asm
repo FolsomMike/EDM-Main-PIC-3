@@ -219,8 +219,43 @@ HI_CURRENT_LIMIT_POT    EQU     .104    ; tweak for 2.0 Volts
 LO_CURRENT_LIMIT_POT    EQU     .94     ; tweak for 1.8 Volts
 
 
-VOLTAGE_MONITOR_POT     EQU     .127    ; not currently used -- manual pot is used instead
-CURRENT_MONITOR_POT     EQU     .127    ; not currently used -- manual pot is used instead
+VOLTAGE_MONITOR_POT     EQU     .255
+CURRENT_MONITOR_POT     EQU     .255
+
+
+; Cutting Current Pulse Controller Values (cycle width and duty cycle)
+;
+; with oscillator frequency of 16 Mhz and Timer 2 prescaler set to 4:
+;
+; each count of PWM_PERIOD equals 1uS of period with an offset of +1
+;
+;    period uS = (PWM_PERIOD + 1) * 1 uS
+;
+; each count of PWM_DUTY_CYCLE_LO_BYTE_DEFAULT:PWM_DUTY_CYCLE_LO_BYTE_DEFAULT equals 0.25 uS
+;  for the high pulse width -- note that signal is inverted before it reaches testpoing J23 so this
+;  is actually a low pulse at that point
+;
+;   pulse width uS = PWM_DUTY_CYCLE_LO_BYTE_DEFAULT:PWM_DUTY_CYCLE_LO_BYTE_DEFAULT * 0.25 uS
+;
+
+
+PWM_PERIOD_DEFAULT EQU  .217                ; gives 218 uS PWM period
+                                            ; period uS = (PWM_PERIOD + 1) * 1 uS
+
+PWM_DUTY_CYCLE_HI_BYTE_DEFAULT      EQU     0x00    ; 00:b8 gives 46 uS PWM high pulse width
+PWM_DUTY_CYCLE_LO_BYTE_DEFAULT      EQU     0xb8    ; (high:lo) * 0.25 uS = high pulse width
+                                                    ; note that signal is inverted befor it reaches
+                                                    ; testpoint J23
+
+PWM_POLARITY_DEFAULT                EQU     0x00
+
+
+; LED PIC Commands
+
+LEDPIC_SET_LEDS                 EQU 0x00    ; sets the on/off states of the LED arrays
+LEDPIC_SET_PWM                  EQU 0x01    ; sets the PWM values
+LEDPIC_START                    EQU 0x02    ; starts normal operation
+LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
@@ -252,7 +287,7 @@ EXTENDED_RATIO0  EQU     0x37
 ;--------------------------------------------------------------------------------------------------
 ; Configurations, etc. for the Assembler Tools and the PIC
 
-;	LIST p = PIC16F648a	;select the processor
+	LIST p = PIC16F1459	;select the processor
 
     errorlevel  -306 ; Suppresses Message[306] Crossing page boundary -- ensure page bits are set.
 
@@ -389,6 +424,16 @@ EEPROM1_WRITE_ID            EQU     b'10100000'
 EEPROM1_READ_ID             EQU     b'10100001'
 
 
+; I2C bus ID bytes for writing and reading to the LED PIC
+; upper nibble = 1010 (bits 7-4)
+; chip A2-A0 inputs = 010 (bits 3-1)
+; R/W bit set to 0 (bit 0) for writing
+; R/W bit set to 1 (bit 0) for reading
+
+LED_PIC_WRITE_ID            EQU     b'10100100'
+LED_PIC_READ_ID             EQU     b'10100101'
+
+
 ; end of Hardware Definitions
 ;--------------------------------------------------------------------------------------------------
 
@@ -486,6 +531,13 @@ BLINK_ON_FLAG			EQU		0x01
 
     overCurrentTimer1	    ; tracks time between over current spikes (sensed by voltage change on comparator input)
     overCurrentTimer0
+
+    pwmSetCommandByte       ; convenience variable for the LED PIC set LEDs command byte
+    pwmDutyCycleHiByte      ; cutting current pulse controller duty cycle time
+    pwmDutyCycleLoByte
+    pwmPeriod               ; cutting current pulse controller period time
+    pwmPolarity             ; polarity of the PWM output -- only lsb used
+    pwmCheckSum             ; used to verify PWM values read from eeprom
 
     ratio1                  ; stores the number of motor steps per 0.001"
     ratio0                  ; this is used to reload preScaler
@@ -693,9 +745,18 @@ BLINK_ON_FLAG			EQU		0x01
     eeDepth2
     eeDepth1
     eeDepth0
+
     eeFlags
+
     eeSparkLevelNotch       ; NOTE: keep eeSparkLevelNotch and eeSparkLevelWall contiguous
     eeSparkLevelWall
+
+    eePWMDutyCycleHiByte    ; NOTE: keep PWM values contigious
+    eePWMDutyCycleLoByte
+    eePWMPeriod
+    eePWMPolarity
+    eePWMCheckSum
+
 
  endc
 
@@ -771,7 +832,7 @@ setup:
 
     call    initializeOutputs
 
-    call    setupI2CMaster7BitTransmitMode ; prepare the I2C serial bus for use
+    call    setupI2CMaster7BitMode ; prepare the I2C serial bus for use
 
     call    setDigitalPots  ; set digital pot values to stored values
 
@@ -838,6 +899,8 @@ setup:
 
     call    readDepthValueFromEEprom    ; read the value stored for depth from the EEProm
 
+    call    readPWMValsFrmEEpromSendLEDPIC
+
     ; set up the LCD buffer variables
 
     banksel LCDFlags
@@ -857,6 +920,8 @@ setup:
     bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
 
     call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
+
+    call    setLEDArrays    ; set the on/off states for the LED arrays
 
     return
 
@@ -1053,6 +1118,106 @@ setupPortC:
     return
 
 ; end of setupPortC
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readPWMValsFrmEEpromSendLEDPIC
+;
+; Reads the Pulse Width Module (PWM) values for the Cutting Current pulse controller and
+; transmits the values to the LED PIC which handles that function via the I2C bus.
+;
+; If the values have never previously been saved to the eeprom, the checksum validation should
+; fail and default values will be used.
+;
+
+readPWMValsFrmEEpromSendLEDPIC:
+
+    call    readPWMValuesFromEEprom
+
+    call    sendPWMValuesToLEDPIC
+
+    return
+
+; end of readPWMValsFrmEEpromSendLEDPIC
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sendPWMValuesToLEDPIC
+;
+; Sends the PWM values to the LED PIC.
+;
+
+sendPWMValuesToLEDPIC:
+
+;    return                  ;debug mks -- remove this when ready to use
+
+    banksel scratch0
+    movlw   .6                      ; send command byte and two values
+    movwf   scratch0
+
+    movlw   LEDPIC_SET_PWM         ; precede values with command byte
+    banksel pwmSetCommandByte
+    movwf   pwmSetCommandByte
+
+    movlw   pwmSetCommandByte       ; point to first byte to be sent
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendPWMValuesToLEDPIC
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setLEDArrays
+;
+; Sets LED arrays to known on/off states.
+;
+
+setLEDArrays:
+
+    banksel scratch2
+
+    movlw   0x00            ; value for red LED array
+    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch2
+    movlw   0x00            ; value for green LED array
+    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch3
+
+    call    sendLEDArrayValues
+
+    return
+
+; end of setLEDArrays
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sendLEDArrayValues
+;
+; Sends values to LED PIC to set on/off state of the LED arrays.
+;
+; Value for the red LED array should be in scratch2.
+; Value for the red LED array should be in scratch3.
+;
+
+sendLEDArrayValues:
+
+    banksel scratch0
+
+    movlw   .3                      ; send command byte and two values
+    movwf   scratch0
+    movlw   LEDPIC_SET_LEDS         ; put command byte in scratch1
+    movwf   scratch1
+    movlw   scratch1                ; point to first byte to be sent
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendLEDArrayValues
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1294,6 +1459,128 @@ saveFlagsToEEprom:
     return
 
 ; end of saveFlagsToEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readPWMValuesFromEEprom
+;
+; Reads PWM module time period and duty cycle and output polarity values from the eeprom.
+;
+; These values are sent to the LED PIC to specify the period and duty cycle of the pulse
+; controlling the on/off times of the cutting current.
+;
+; The least significant bit of the polarity value is used to set the PWM output polarity.
+;
+; Before saving, the bytes are added together to create a checksum which is also stored in the
+; eeprom. This allows the reading function to verify that the values are valid and also that the
+; eeprom was not empty and the values had never been stored.
+;
+; The value of 1 is added to the checksum...(see note in the header for function
+;   savePWMValuesToEEprom for details).
+;
+; Upon reading, if the checksum is invalid then safe default PWM values are used instead.
+;
+; NOTE: Improper PWM values can destroy the MOSFETs.
+;
+
+readPWMValuesFromEEprom:
+
+    banksel pwmDutyCycleHiByte
+
+    movlw   pwmDutyCycleHiByte           ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eePWMDutyCycleHiByte         ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .5
+    movwf   eepromCount                  ; read 4 bytes
+    call    readFromEEprom
+
+    banksel pwmDutyCycleHiByte
+
+    clrw                                ; calculate the checksum for all PWM values
+    addwf   pwmDutyCycleHiByte,W
+    addwf   pwmDutyCycleLoByte,W
+    addwf   pwmPeriod,W
+    addwf   pwmPolarity,W
+    addlw   1                           ; see note in function header
+
+    subwf   pwmCheckSum,W               ; compare calculated checksum with that read from eeprom
+    btfsc   STATUS,Z
+    goto    pwmValuesReadAreValid       ; zero flag set, checksum matched, skip
+
+    ; checksum read did not match calculated checksum, so use default values
+
+    movlw   PWM_DUTY_CYCLE_HI_BYTE_DEFAULT
+    movwf   pwmDutyCycleHiByte
+
+    movlw   PWM_DUTY_CYCLE_LO_BYTE_DEFAULT
+    movwf   pwmDutyCycleLoByte
+
+    movlw   PWM_PERIOD_DEFAULT
+    movwf   pwmPeriod
+
+    movlw   PWM_POLARITY_DEFAULT
+    movwf   pwmPolarity
+
+    clrw                                ; calculate the checksum for all PWM values
+    addwf   pwmDutyCycleHiByte,W
+    addwf   pwmDutyCycleLoByte,W
+    addwf   pwmPeriod,W
+    addwf   pwmPolarity,W
+    addlw   1                           ; see note in function header
+    movwf   pwmCheckSum
+
+pwmValuesReadAreValid:
+
+    return
+
+; end of readPWMValuesFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; savePWMValuesToEEprom
+;
+; Saves PWM module time period and duty cycle and output polarity values to the eeprom.
+;
+; These values are sent to the LED PIC to specify the period and duty cycle of the pulse
+; controlling the on/off times of the cutting current.
+;
+; Before saving, the bytes are added together to create a checksum which is also stored in the
+; eeprom. This allows the reading function to verify that the values are valid and also that the
+; eeprom was not empty and the values had never been stored.
+;
+; The value of 1 is added to the checksum to catch cases where the eeprom values have never been
+; set and are all zeros in which case the data bytes would sum to zero and then match the zero
+; value also read for the checksum -- this would make the zero values appear to be valid. Adding
+; 1 means the checksum would also have to be 1 to create a match, which is possible if eeprom is
+; filled with random values but not as likely as an all zero case.
+;
+
+savePWMValuesToEEprom:
+    
+    banksel pwmDutyCycleHiByte
+
+    clrw                                ; calculate the checksum for all PWM values
+    addwf   pwmDutyCycleHiByte,W
+    addwf   pwmDutyCycleLoByte,W
+    addwf   pwmPeriod,W
+    addwf   pwmPolarity,W
+    addlw   1                           ; see note in function header
+    movwf   pwmCheckSum
+
+    movlw   pwmDutyCycleHiByte          ; address in RAM
+    movwf   FSR0L
+    clrf    eepromAddressH
+    movlw   eePWMDutyCycleHiByte        ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .5
+    movwf   eepromCount                 ; write 4 bytes
+    call    writeToEEprom
+
+    return
+
+; end of savePWMValuesToEEprom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4678,7 +4965,7 @@ loopRFE1:
 
 writeToEEprom:
 
-loopWTE1:	
+loopWTE1:
 
     moviw   FSR0++              ; store byte to be written in scratch0
     banksel scratch0
@@ -4737,12 +5024,50 @@ setDigitalPotInChip1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; sendBytesToLEDPICViaI2C
+;
+; Sends byte to the LED PIC via the I2C bus.
+;
+; The number of bytes to be written should be in scratch0.
+; Indirect register FSR0 should point to first byte in RAM to be written.
+;
+
+sendBytesToLEDPICViaI2C:
+
+    call    clearSSP1IF             ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   LED_PIC_WRITE_ID        ; send proper ID to write to LED PIC
+    call    sendI2CByte             ; send byte in W register on I2C bus after SSP1IF goes high
+
+loopSBLP1:
+
+    moviw   FSR0++                  ; load next byte to be sent
+    call    sendI2CByte
+
+    banksel scratch0
+	decfsz	scratch0,F              ; count down number of bytes transferred
+	goto	loopSBLP1               ; not zero yet - trasfer more bytes
+
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
+
+    call    generateI2CStop
+
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
+
+    return
+
+; end of sendBytesToLEDPICViaI2C
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; writeByteToEEprom1ViaI2C
 ;
 ; Writes a byte to EEprom1 via the I2C bus.
 ;
 ; The byte to be written should be in scratch0.
-; The EEprom target address wordk should be in eepromAddressL/H
+; The EEprom target address word should be in eepromAddressL/H
 ;
 
 writeByteToEEprom1ViaI2C:
@@ -4783,7 +5108,7 @@ writeByteToEEprom1ViaI2C:
 ; Reads a byte from EEprom1 via the I2C bus.
 ;
 ; The byte read will be returned in scratch0.
-; The EEprom source address wordk should be in eepromAddressL/H
+; The EEprom source address word should be in eepromAddressL/H
 ;
 ; To read a byte from the EEprom, the source address is first set by using a write command. A
 ; restart condition is then generated and the byte read using a read command.
@@ -4956,7 +5281,7 @@ clearSSP1IF:
 waitForSSP1IFHigh:
 
     ifdef debug       ; if debugging, don't wait for interrupt to be set high as the MSSP is not
-    return;           ; simulated by the IDE
+    return            ; simulated by the IDE
     endif
 
     banksel PIR1
@@ -5022,16 +5347,15 @@ sendI2CByte:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; setupI2CMaster7BitTransmitMode
+; setupI2CMaster7BitMode
 ;
-; Sets the MASTER SYNCHRONOUS SERIAL PORT (MSSP) MODULE to the I2C Master Transmission mode using
-; the 7 bit address mode.
+; Sets the MASTER SYNCHRONOUS SERIAL PORT (MSSP) MODULE to the I2C Master mode using the 7 bit
+; address mode.
 ;
 ; NOTE: RB4 and RB6 must have been configured elswhere as inputs for this mode.
 ;
 
-setupI2CMaster7BitTransmitMode:
-
+setupI2CMaster7BitMode:
 
     movlw   0x27			; set baud rate at 100kHz for oscillator frequency of 16 Mhz
     banksel SSPADD
@@ -5047,7 +5371,7 @@ setupI2CMaster7BitTransmitMode:
 
     return
 
-; end setupI2CMaster7BitTransmitMode
+; end setupI2CMaster7BitMode
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -5165,18 +5489,42 @@ rbd2:
 
 rbd3:
 
-    decfsz  scratch8
+    decfsz  scratch8,F
     goto    rbd3
 
-    decfsz  scratch7
+    decfsz  scratch7,F
     goto    rbd2
 
-    decfsz  scratch6
+    decfsz  scratch6,F
     goto    rbd1
 
     return
 
 ; end of reallyBigDelay
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; debugFunc1
+;
+; Performs functions for debug testing such as stuffing values into variables, etc.
+;
+
+debugFunc1:
+
+    ; stuff a value into the PWM variables
+
+    movlw   0xff
+    movwf   pwmDutyCycleHiByte
+    movwf   pwmDutyCycleLoByte
+    movwf   pwmPeriod
+    movwf   pwmPolarity
+
+    movlw   0xfd
+    movwf   pwmCheckSum
+
+    return
+
+; end of debugFunc1
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
