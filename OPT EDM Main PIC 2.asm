@@ -923,6 +923,8 @@ setup:
 
     call    setLEDArrays    ; set the on/off states for the LED arrays
 
+    call    sendLEDPICStart ; command the LED PIC to display Current/Voltage on LED arrays
+
     return
 
 ; end of setup
@@ -1218,6 +1220,31 @@ sendLEDArrayValues:
     return
 
 ; end of sendLEDArrayValues
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sendLEDPICStart
+;
+; Sends start command to LED PIC to initiate displaying the Current and Voltage monitor voltages
+; on the LED arrays.
+;
+
+sendLEDPICStart:
+
+    banksel scratch0
+
+    movlw   .1                      ; send command byte
+    movwf   scratch0
+    movlw   LEDPIC_START            ; put command byte in scratch1
+    movwf   scratch1
+    movlw   scratch1                ; point to first byte to be sent
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendLEDPICStart
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
