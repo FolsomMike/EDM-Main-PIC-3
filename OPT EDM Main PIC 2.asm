@@ -1151,8 +1151,6 @@ readPWMValsFrmEEpromSendLEDPIC:
 
 sendPWMValuesToLEDPIC:
 
-;    return                  ;debug mks -- remove this when ready to use
-
     banksel scratch0
     movlw   .6                      ; send command byte and two values
     movwf   scratch0
@@ -1193,6 +1191,30 @@ setLEDArrays:
     return
 
 ; end of setLEDArrays
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setLEDArrays2
+;
+; Sets LED arrays to known on/off states.
+;
+
+setLEDArrays2:
+
+    banksel scratch2
+
+    movlw   0x00            ; value for red LED array
+;    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch2
+    movlw   0x55            ; value for green LED array
+;    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch3
+
+    call    sendLEDArrayValues
+
+    return
+
+; end of setLEDArrays2
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
