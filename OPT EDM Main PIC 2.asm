@@ -520,11 +520,10 @@ BLINK_ON_FLAG			EQU		0x01
     sparkLevel              ; current value being used - copy from sparkLevelNotch or sparkLevelWall
                             ; depending on flags.WALL_MODE
 
-    sparkLevelNotch         ; specifies the low amount of spark to trigger an advance in notch mode, smaller number
-                            ; makes advance more aggressive  
-                            ; NOTE: keep eeSparkLevelNotch and eeSparkLevelWall contiguous
+    sparkLevelNotch         ; specifies the low amount of spark to trigger an advance in notch mode,
+                            ;  smaller number makes advance more aggressive
     sparkLevelWall          ; same as above, but for the wall reduction mode
-                            ; NOTE: keep eeSparkLevelNotch and eeSparkLevelWall contiguous
+                            ; NOTE: keep sparkLevelNotch and sparkLevelWall contiguous
 
     sparkTimer1             ; tracks time between sparks (sensed by voltage change on comparator input)
     sparkTimer0
@@ -2959,8 +2958,8 @@ exitCT:
 ; sparkTimer
 ;
 ; Tracks time between sparking of the blade.  Uses high limit comparator input - if this signal
-; is 0, then voltage and current are good - if 1 then the blade needs to move down.  If the blade
-; moves down every time this signal goes to 1, it advances too quickly - it should only advance
+; is 1, then voltage and current are good - if 0 then the blade needs to move down.  If the blade
+; moves down every time this signal goes to 0, it advances too quickly - it should only advance
 ; when no spark has occurred for a specified time.
 ;
 ; The timer counts down and is reset any time the voltage/current are good.  If the timer makes
@@ -2969,6 +2968,10 @@ exitCT:
 ; Returns Z = 0 if not time to advance, Z = 1 if time to advance (lower blade).
 ;
 ; A smaller value makes the advance more aggressive.
+;
+; The forced 1 value in the lower nibble of sparkLevel and in the lower byte of the counter word
+; are required to avoid 0 values as decfsz is used for which a starting value of 0 would result in
+; 255 loops.
 ;
 
 sparkTimer:
@@ -3081,9 +3084,17 @@ noRetractOCT:
 ;
 ; Uses W, speedValue, sparkLevel, sparkLevelNotch, sparkLevelWall
 ;
-; speedValue contains 1-9 to represent sparkLevel 0x01-0x81
+; speedValue range is 1-9 which is converted to sparkLevel range of 0x01-0x81
 ;
-; In actual use, the sparkLevel is used as the upper byte of the actual value: sparkLevel:0x01
+; Thus, speedValue of 1 gives sparkLevel of 0x01; 2 gives 0x11; 3 gives 0x21, etc.
+;
+; In actual use, sparkLevel is then used as the upper byte of a counter word:
+;
+;   sparkLevel:0x01
+;
+; The forced 1 value in the lower nibble of sparkLevel and in the lower byte of the counter word
+; are required to avoid 0 values as decfsz is used for which a starting value of 0 would result in
+; 255 loops.
 ;
 
 adjustSpeedUp:
@@ -3118,8 +3129,8 @@ adjustSpeedDown:
 
 updateAS:
 
-; update and save to eeprom the new value but do not display the new value - will be handled
-; by the cutNotch function
+; update and set dirty flag so values will be saved to eeprom later
+; set display flag to trigger cutNotch function to update the values on the display
 
     btfsc   flags,WALL_MODE ; Notch or Wall mode?
     goto    wallModeAS
@@ -3137,7 +3148,7 @@ wallModeAS:
 processValueAS:
 
     ; convert speedValue from 1-9 to 0x01-0x81 and store in sparkLevel and Notch or Wall
-    ; variable (pointed by FSR)
+    ; variable (pointed by FSR) -- see notes in function header for details
 
     movlw   0x01
     subwf   speedValue,W
