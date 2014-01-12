@@ -1063,6 +1063,8 @@ setupPortB:
     banksel LATB                        ; init port data latch
     clrf    LATB
 
+    bsf     LATB,SERIAL_OUT             ; initialize SERIAL_OUT high before changing pin to output
+                                        ; so a start bit won't be transmitted
     banksel ANSELB
     clrf    ANSELB                      ; setup port for all digital I/O
 
