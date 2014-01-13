@@ -215,8 +215,11 @@
 ; Each count equals approximately 0.0196V when power is at +5V
 ;
 
-HI_CURRENT_LIMIT_POT    EQU     .104    ; tweak for 2.0 Volts
-LO_CURRENT_LIMIT_POT    EQU     .94     ; tweak for 1.8 Volts
+HI_CURRENT_LIMIT_POT    EQU     .99     ; trying new value!
+                                        ; use .104 for 2.0 Volts
+
+LO_CURRENT_LIMIT_POT    EQU     .89     ;trying new value!
+                                        ; use .89 for 1.8 Volts
 
 
 VOLTAGE_MONITOR_POT     EQU     .255
@@ -3084,9 +3087,9 @@ noRetractOCT:
 ;
 ; Uses W, speedValue, sparkLevel, sparkLevelNotch, sparkLevelWall
 ;
-; speedValue range is 1-9 which is converted to sparkLevel range of 0x01-0x81
+; speedValue range is 1-9 which is converted to sparkLevel range of 0x01-0x11
 ;
-; Thus, speedValue of 1 gives sparkLevel of 0x01; 2 gives 0x11; 3 gives 0x21, etc.
+; Thus, speedValue of 1 gives sparkLevel of 0x01; 2 gives 0x03; 3 gives 0x05, etc.
 ;
 ; In actual use, sparkLevel is then used as the upper byte of a counter word:
 ;
@@ -3147,19 +3150,16 @@ wallModeAS:
 
 processValueAS:
 
-    ; convert speedValue from 1-9 to 0x01-0x81 and store in sparkLevel and Notch or Wall
+    ; convert speedValue from 1-9 to 0x01-0x11 and store in sparkLevel and Notch or Wall
     ; variable (pointed by FSR) -- see notes in function header for details
 
     movlw   0x01
     subwf   speedValue,W
     movwf   sparkLevel
-    rlf     sparkLevel,F    ; move low nibble to high
-    rlf     sparkLevel,F
-    rlf     sparkLevel,F
-    rlf     sparkLevel,F
+    rlf     sparkLevel,F    ; shift left 1 bit
     movf    sparkLevel,W    ; get the rotated value
-    andlw   0xf0            ; mask off lower nibble
-    addlw   0x01            ; set lower nibble
+    andlw   0xfe            ; mask off lower bit(s)
+    addlw   0x01            ; force value to be at least value of 1
     movwf   sparkLevel      ; store value in sparkLevel
     movwf   INDF0           ; store value in appropriate variable
  
@@ -4076,7 +4076,7 @@ loopDBV1:
 ;
 ; On exit:
 ;
-; speedValue contains 1-9 to represent sparkLevel 0x01-0x81
+; speedValue ranges from 1-9 to represent sparkLevel range 0x01-0x11
 ;
 ; In actual use, the sparkLevel is used as the upper byte of the actual value: sparkLevel:0x01
 ;
@@ -4088,12 +4088,11 @@ displaySpeed:
     movlw   0xcd
     call    writeControl    ; position at line 2 column 14
 
+    ; parse the speedValue number from the sparkLevel value
+
     movf    sparkLevel,W    ; get the current speed/sparkLevel value
     movwf   speedValue      ; store in variable so we can manipulate it
-    rrf     speedValue,F    ; move high nibble to low
-    rrf     speedValue,F
-    rrf     speedValue,F
-    rrf     speedValue,F
+    rrf     speedValue,F    ; shift value to the right
     movf    speedValue,W    ; get the rotated value
     andlw   0x0f            ; mask off upper nibble
     addlw   0x01            ; shift up one
