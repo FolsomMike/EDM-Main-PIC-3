@@ -215,11 +215,18 @@
 ; Each count equals approximately 0.0196V when power is at +5V
 ;
 
-HI_CURRENT_LIMIT_POT    EQU     .69     ; .69 cuts .060 notch in 1.5 minutes
-LO_CURRENT_LIMIT_POT    EQU     .59     ; .59 cuts .060 notch in 1.5 minutes
+HI_CURRENT_LIMIT_POT    EQU     .69     ; .69/.59 cuts .060 notch in 1.5 minutes
+LO_CURRENT_LIMIT_POT    EQU     .59
 
-VOLTAGE_MONITOR_POT     EQU     .255
-CURRENT_MONITOR_POT     EQU     .255
+CURRENT_LIMIT_DIFFERENCE    EQU .10     ; difference between high and low current pot values
+
+CURRENT_LIMIT_POT_OFFSET    EQU .49     ; base level for HI_CURRENT_LIMIT_POT when power level
+                                        ; is 0 (0 not actually used -- 1 is lowest value)
+CURRENT_LIMIT_POT_INCREMENT EQU .10     ; increment between each pot value setting for each
+                                        ; count of power level
+
+VOLTAGE_MONITOR_POT         EQU     .255
+CURRENT_MONITOR_POT         EQU     .255
 
 
 ; Cutting Current Pulse Controller Values (cycle width and duty cycle)
@@ -513,6 +520,10 @@ BLINK_ON_FLAG			EQU		0x01
     eepromAddressL		    ; use to specify address to read or write from EEprom
     eepromAddressH          ; high byte
     eepromCount	        	; use to specify number of bytes to read or write from EEprom
+
+    hiCurrentLimitPot       ; value for digital pot which sets the high current limit value
+    loCurrentLimitPot       ; value for digital pot which sets the high current limit value
+    powerLevel              ; store the power level of the high/low current values in use
 
     speedValue              ; stores sparkLevel converted to a single digit
 
@@ -831,6 +842,8 @@ setup:
     call    initializeOutputs
 
     call    setupI2CMaster7BitMode ; prepare the I2C serial bus for use
+
+    call    initHighLowCurrentLimitPotValues
 
     call    setDigitalPots  ; set digital pot values to stored values
 
@@ -1270,6 +1283,35 @@ sendLEDPICStart:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; initHighLowCurrentLimitPotValues
+;
+; Sets the high and low current comparator digital pot variables to default settings.
+;
+; Sets the Power Level value to "2" for the default settings.
+;
+; Does not send the values to the digital pots.
+;
+
+initHighLowCurrentLimitPotValues:
+
+    movlw   HI_CURRENT_LIMIT_POT
+    banksel hiCurrentLimitPot
+    movwf   hiCurrentLimitPot
+
+    movlw   LO_CURRENT_LIMIT_POT
+    banksel loCurrentLimitPot
+    movwf   loCurrentLimitPot
+
+    movlw   .2                  ; default power level for the default pot settings is 2
+    banksel powerLevel
+    movwf   powerLevel
+
+    return
+
+; end of initHighLowCurrentLimitPotValues
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; setDigitalPots
 ;
 ; Sets the digital pot values to their stored settings.
@@ -1277,19 +1319,9 @@ sendLEDPICStart:
 
 setDigitalPots:
 
-    banksel scratch0
-    movlw   HI_LIMIT_POT_ADDR
-    movwf   scratch0
-    movlw   HI_CURRENT_LIMIT_POT
-    movwf   scratch1
-    call    setDigitalPotInChip1
+    call    setHighCurrentLimitDigitalPot
 
-    banksel scratch0
-    movlw   LO_LIMIT_POT_ADDR
-    movwf   scratch0
-    movlw   LO_CURRENT_LIMIT_POT
-    movwf   scratch1
-    call    setDigitalPotInChip1
+    call    setLowCurrentLimitDigitalPot
 
     banksel scratch0
     movlw   VOLTAGE_MONITOR_POT_ADDR
@@ -1308,6 +1340,48 @@ setDigitalPots:
     return
 
 ; end of setDigitalPots
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setHighCurrentLimitDigitalPot
+;
+; Sets the digital pot value for the high current limit comparator to the value in hiCurrentLimit.
+;
+
+setHighCurrentLimitDigitalPot:
+
+    banksel hiCurrentLimitPot
+    movf    hiCurrentLimitPot,W
+
+    banksel scratch0
+    movwf   scratch1                ; the pot value
+    movlw   HI_LIMIT_POT_ADDR
+    movwf   scratch0
+
+    goto    setDigitalPotInChip1
+
+; end of setHighCurrentLimitDigitalPot
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setLowCurrentLimitDigitalPot
+;
+; Sets the digital pot value for the low current limit comparator to the value in loCurrentLimit.
+;
+
+setLowCurrentLimitDigitalPot:
+
+    banksel loCurrentLimitPot
+    movf    loCurrentLimitPot,W
+
+    banksel scratch0
+    movwf   scratch1                ; the pot value
+    movlw   LO_LIMIT_POT_ADDR
+    movwf   scratch0
+
+    goto    setDigitalPotInChip1
+
+; end of setLowCurrentLimitDigitalPot
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -2539,10 +2613,10 @@ cutLoop:
 checkUPDWNButtons:
 
     btfss   JOG_UP_SW_P,JOG_UP_SW
-    call    adjustSpeedUp   ; increment the speed (sparkLevel) value
+    call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
 
     btfss   JOG_DWN_SW_P,JOG_DWN_SW
-    call    adjustSpeedDown ; decrement the speed (sparkLevel) value
+    call    adjustSpeedOrPowerDown ; decrement the speed (sparkLevel) value or Power Level
 
 checkHiLimit:
 
@@ -2677,7 +2751,7 @@ displayCN:
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
 
-    call    displaySpeed    ; display the current advance speed value (sparkTimer level)
+    call    displaySpeedAndPower    ; display the current advance speed and power level
 
     movlw   0xdf
     call    writeControl    ; position in desired location
@@ -2732,7 +2806,7 @@ setupCutNotchAndCycleTest:
     call    printString     ; "Up   Speed>"
     call    waitLCD         ; wait until buffer printed
 
-    call    displaySpeed    ; display the current advance speed value (sparkTimer level)
+    call    displaySpeedAndPower    ; display the current advance speed and power level
     call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
 
     movlw   0x95
@@ -3074,6 +3148,38 @@ noRetractOCT:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; adjustSpeedOrPowerUp
+;
+; If Mode switch is in "Setup" position, jumps to adjustSpeedUp.
+; If switch is in "Normal" position, jumps to adjustPowerUp.
+;
+
+adjustSpeedOrPowerUp:
+
+    btfss   MODE_SW_P,MODE_SW   ; in Setup mode?
+    goto    adjustSpeedUp       ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerUp       ; adjust Power Level if in "Normal" mode
+
+; end of adjustSpeedOrPowerUp
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; adjustSpeedOrPowerDown
+;
+; If Mode switch is in "Setup" position, jumps to adjustSpeedDown.
+; If switch is in "Normal" position, jumps to adjustPowerDown.
+;
+
+adjustSpeedOrPowerDown:
+
+    btfss   MODE_SW_P,MODE_SW   ; in Setup mode?
+    goto    adjustSpeedDown     ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerDown     ; adjust Power Level if in "Normal" mode
+
+; end of adjustSpeedOrPowerDown
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; adjustSpeedUp and adjustSpeedDown
 ;
 ; Call adjustSpeedUp if jog up button toggled, adjustSpeedDown if jog down button toggled.
@@ -3171,6 +3277,94 @@ processValueAS:
     return
 
 ; end of adjustSpeedUp and adjustSpeedDown
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; adjustPowerUp and adjustPowerDown
+;
+; Call adjustPowerUp if jog up button toggled, adjustPowerDown if jog down button toggled.
+;
+; If jog up then speed is increased by one, rolling from 5 to 1 if appropriate.
+; If jog down then speed is decreased by one, rolling from 1 to 5 if appropriate.
+;
+; Power level is range of 1-5 which is converted to a value for hiCurrentLimitPot.
+; Value of loCurrentLimitPot is then set to CURRENT_LIMIT_DIFFERENCE lower than hiCurrentLimitPot.
+;
+; The Power Level is converted to a value for hiCurrentLimitPot using this formula:
+;
+;   hiCurrentLimitPot = CURRENT_LIMIT_POT_OFFSET + (powerLevel * CURRENT_LIMIT_POT_INCREMENT)
+;   loCurrentLimitPot = hiCurrentLimitPot - CURRENT_LIMIT_DIFFERENCE
+;
+
+adjustPowerUp:
+
+; jog up button press
+
+    incf    powerLevel,F    ; increment the value
+
+    movlw   .6
+    subwf   powerLevel,W    ; check if upper limit reached
+    btfss   STATUS,Z
+    goto    updateAP        ; display the digit
+
+    movlw   .1
+    movwf   powerLevel      ; roll around if limti reached
+
+    goto    updateAP        ; display the digit
+
+adjustPowerDown:
+
+; jog down button press
+
+    decf    powerLevel,F    ; decrement the value
+
+    movlw   .0
+    subwf   powerLevel,W    ; check if less than lower limit
+    btfss   STATUS,Z
+    goto    updateAP        ; display the digit
+
+    movlw   .5
+    movwf   powerLevel      ; roll around if limit reached
+
+updateAP:
+
+    ; convert Power Level to values for the digital pots
+    ; see notes in function header for details
+
+    movlw   CURRENT_LIMIT_POT_OFFSET
+    movwf   hiCurrentLimitPot
+
+    movf    powerLevel,W
+    movwf   scratch0
+
+apuLoop1:
+
+    movlw   CURRENT_LIMIT_POT_INCREMENT     ; add an increment for each count of Power Level
+    addwf   hiCurrentLimitPot,F
+
+    decfsz  scratch0
+    goto    apuLoop1
+
+apuExit:
+
+    movlw   CURRENT_LIMIT_DIFFERENCE        ; calculate low setting from the high setting
+    subwf   hiCurrentLimitPot,W
+    movwf   loCurrentLimitPot
+
+    call    setHighCurrentLimitDigitalPot
+    call    setLowCurrentLimitDigitalPot
+
+    banksel flags
+    bsf     flags,UPDATE_DISPLAY            ; set flag so display will be updated
+
+    movlw   0x45                            ; start the switch debounce timer at 0x1245
+    movwf   debounce0
+    movlw   0x12
+    movwf   debounce1
+
+    return
+
+; end of adjustPowerUp and adjustPowerDown
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4058,10 +4252,21 @@ loopDBV1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; displaySpeed
+; displaySpeedAndPower
 ;
-; Displays the current speed value (stored as sparkTimer).  The value in sparkTimer ranges from
-; 0x0101 to 0x8101.  The value is converted to ASCII 1 - 9 and displayed.
+; Displays the current speed value (stored as sparkLevel) and the current power setting. The power
+; setting is the cutting current range in use -- represetns the values used for the high and low
+; level comparator digital pot values.
+;
+; The value in sparkLevel is converted to ASCII 1 - 9 and displayed.
+; A '-' (dash) separator is displayed to separate the values.
+; The value powerLeve is converted to ASCII 1-5 and displayed.
+;
+; Search for other comments regarding sparkLevel for more info on how its value relates to the
+; ASCII values 1-9.
+;
+; Search for other comments regarding hiCurrentLimitPot and loCurrentLimitPot for more info on how
+; their values relate to the ASCII values 1-5.
 ;
 ; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
 ; this function, call flushLCD or printString to flush the buffer.
@@ -4072,19 +4277,22 @@ loopDBV1:
 ;
 ; On exit:
 ;
-; speedValue ranges from 1-9 to represent sparkLevel range 0x01-0x11
-;
-; In actual use, the sparkLevel is used as the upper byte of the actual value: sparkLevel:0x01
-;
 ; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, sparkValue
 ;
+; WIP NOTE: The speed display value is parsed from the sparkLevel setting while the power display
+; is parsed much more simple from the powerLevel variable.
+; Couldn't speedLevel be used in a similar manner (and faster) rather than parsing from sparkLevel?
+; Would need to set speedLevel when sparkLevel is loaded from eeprom in the beginning.
+;
 
-displaySpeed:
+displaySpeedAndPower:
 
     movlw   0xcd
     call    writeControl    ; position at line 2 column 14
 
-    ; parse the speedValue number from the sparkLevel value
+    ; display the speed value
+
+    ; parse the ASCII number from the sparkLevel value
 
     movf    sparkLevel,W    ; get the current speed/sparkLevel value
     movwf   speedValue      ; store in variable so we can manipulate it
@@ -4095,11 +4303,23 @@ displaySpeed:
     movwf   speedValue      ; store speed value for use by other functions
 
     addlw   0x30            ; convert BCD digit to ASCII
-    call    writeChar       ; write the first digit
+    call    writeChar       ; write to the LCD buffer
+
+    ; write a '-' (dash) separator
+
+    movlw   0x2d            ; write a dash to separate speed from power level
+    call    writeChar       ; write to the LCD buffer
+
+    ; display the power value
+
+    movf    powerLevel,W
+
+    addlw   0x30            ; convert BCD digit to ASCII
+    call    writeChar       ; write to the LCD buffer
 
     return
 
-; end of displaySpeed
+; end of displaySpeedAndPower
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
