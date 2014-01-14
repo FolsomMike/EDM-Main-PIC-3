@@ -215,12 +215,8 @@
 ; Each count equals approximately 0.0196V when power is at +5V
 ;
 
-HI_CURRENT_LIMIT_POT    EQU     .99     ; trying new value!
-                                        ; use .104 for 2.0 Volts
-
-LO_CURRENT_LIMIT_POT    EQU     .89     ;trying new value!
-                                        ; use .89 for 1.8 Volts
-
+HI_CURRENT_LIMIT_POT    EQU     .69     ; .69 cuts .060 notch in 1.5 minutes
+LO_CURRENT_LIMIT_POT    EQU     .59     ; .59 cuts .060 notch in 1.5 minutes
 
 VOLTAGE_MONITOR_POT     EQU     .255
 CURRENT_MONITOR_POT     EQU     .255
