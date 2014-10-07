@@ -1,0 +1,51 @@
+## SCL Builder Setup File: Do not edit!!
+
+## VERSION: MPLAB X
+## FORMAT:  v2.00.01
+## DEVICE:  PIC16F1459
+
+## PINREGACTIONS
+ms
+No Repeat
+PIR1.SSP1IF
+--
+1
+1
+--
+&
+## ADVPINREGACTIONS
+--
+&
+--
+COND1
+Any
+
+
+
+0
+cyc
+
+--
+&
+## CLOCK
+&
+## STIMULUSFILE
+
+PIR1
+PC = 
+0
+2
+C:\Users\Mike\Documents\6 - Controlled Documents\PIC Projects Git Repositories\OPT EDM Main PIC 2\PIR1 Stimulus.txt
+Hex
+Yes
+
+--
+&
+## RESPONSEFILE
+&
+## ASYNCH
+&
+## ADVANCEDSCL
+
+1
+&
