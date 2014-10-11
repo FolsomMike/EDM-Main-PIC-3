@@ -109,6 +109,17 @@
 ; 
 ; Using Full Step mode, the motor has 24 steps per revolution.
 ;
+; Empirical testing shows the gear reduction ratio to be 69:1
+;
+; Using Full Step mode, this results in 1656 steps per revolution of the cam:
+;	24 steps/rev (motor shaft) * 69 (in revs / out revs) = 1656 steps per cam rev
+;
+; On the working side of the cam, each degree of rotation moves the head one mil.
+;
+; This is 4.6 steps / degree (1656 / 360), which is 4.6 steps / mil of head travel.
+;
+; Thus, one step is .217 mil or 0.000217"
+;
 ;--------------------------------------------------------------------------------------------------
 ;
 ; J8 on the schematics is implemented as switches labeled "microstep set" on the board.  The
@@ -141,8 +152,8 @@
 ; Extended reach : 1 revolution = .039" blade travel
 ; Standard Ratio is 9.2 times Extended Ratio
 ;
-;
-; The internal comparators are NOT used - see note in header of "setup" function.
+; The PIC chip's internal comparators are NOT used to detect over/under current conditions - see
+; note in header of "setup" function.
 ;
 ;--------------------------------------------------------------------------------------------------
 ; Hardware Control Description
@@ -276,7 +287,16 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 
 ; Standard Ratio
 ; suggested setup is 17% blade erosion
-; was 0x1a for 1/4 motor step
+; 0x00, 0x06 for full step mode => actual measured head movement 22.5% of 1:1 over 0.2"
+;   (this value was used for a long time with good results)
+;   4.6 => no erosion factor, 1:1 head movement related to display
+;   4.6/6 = .7666 or 23%, pretty close to the measured value of 22.5%
+;
+; Note: the current method of scaling the display is to increment by .001" every time the below
+; number of steps have been executed. This method is inaccurate as it cannot account for the
+; fractional portion of the number of steps per thousandth. A new method will be used in the next
+; version which increments a BCD value representing the displayed value by a fractional amount
+; equal to the number of mils per step.
 
 STANDARD_RATIO1 EQU     0x0      
 STANDARD_RATIO0 EQU     0x06
