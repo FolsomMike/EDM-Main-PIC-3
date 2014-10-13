@@ -84,7 +84,7 @@
 ;--------------------------------------------------------------------------------------------------
 ; Operational Notes
 ;
-; Standard Head
+; Standard Reach Tool
 ;
 ; The cam should turn clockwise when the head is being driven down.
 ; The cam should make a full rotation in 65 seconds while jogging up or down in Setup mode.
@@ -104,6 +104,15 @@
 ;	A-025-125 ~ -A-0,25-12,5 Winding Type
 ;	71	  ~ 71 (-73)  ~ Plain shaft, L=4,3mm (Designation for assembly with gearhead 15A)
 ;
+; On the sticker on the motor:
+;
+;   Faulhaber
+;   P/N: AM15P0199
+;   PO: 956952-003
+;   JO: 30212/2     KW36/13
+;   www.micromo.com
+;
+;
 ; A planetary gearhead is attached: Faulhaber Series 15A.  There are no identifying numbers for
 ; the gearhead printed on the assembly.
 ; 
@@ -115,10 +124,24 @@
 ;	24 steps/rev (motor shaft) * 69 (in revs / out revs) = 1656 steps per cam rev
 ;
 ; On the working side of the cam, each degree of rotation moves the head one mil.
+; 1 degree = 1 mil
+; Rate is 4.6 steps / degree (1656 / 360), which is 4.6 steps / mil of head travel.
 ;
-; This is 4.6 steps / degree (1656 / 360), which is 4.6 steps / mil of head travel.
+; Thus, one step is 0.000217391"
 ;
-; Thus, one step is .217 mil or 0.000217"
+; Extended Reach Tool
+;
+; The Standard Tool Ratio is 9.14 times the Extended Tool Ratio
+;
+; The same motor is used as for the Standard Reach Tool, but a lead screw is used which changes
+; the final gear ratio.
+;
+; One motor revolution = 1mm of blade travel
+; 1mm = 0.0393700787"
+; One motor revolution is 1656 steps
+; 0.0393700787" / 1656 = .000023774"
+;
+; Thus, one step is .000023774"
 ;
 ;--------------------------------------------------------------------------------------------------
 ;
@@ -142,15 +165,6 @@
 ; If RB2 is set high, MS2 = high - step size will be 1/4.  If set low, step size will be full.
 ;
 ; The full step size is currently used - as of version 7.7a
-;
-; On the standard reach head: 1 degree rotation of the motor = 0.001" of blade travel
-; On the extended reach head: 360 degree rotation = 1mm of blade travel
-;
-; 1 meter = 39.3700787 inches, 1mm = 0.0393700787"
-;
-; Standard reach : 1 revolution = .360" blade travel
-; Extended reach : 1 revolution = .039" blade travel
-; Standard Ratio is 9.2 times Extended Ratio
 ;
 ; The PIC chip's internal comparators are NOT used to detect over/under current conditions - see
 ; note in header of "setup" function.
@@ -280,33 +294,80 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 ;--------------------------------------------------------------------------------------------------
 ; Step Ratio Constants
 ;
-; Sets the number of steps per 0.001" for different types of cutting heads.
+; Specifies the blade travel distance per motor step for different types of cutting heads.
+;
+; These are unpacked BCD decimal values, each digit can be 0-9.
+; This is a fractional value, these digits are to the right of the decimal point.
+;
+; Standard Reach Tool Ratio
+;
+; One motor step is 0.000217391"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000217391
+; For 17% erosion factior use .000217391 * .83 = 0.000180435
+;
+; Extended Reach Tool Ratio
+;
+; One motor step is .000023774"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000023774
+; For 17% erosion factior use .000023774 * .83 = 0.000019732
 ;
 
-; Extended Ratio is 9.2 times Standard ratio.
+; .000217391 -> standard tool with no erosion factor
 
-; Standard Ratio
-; suggested setup is 17% blade erosion
-; 0x00, 0x06 for full step mode => actual measured head movement 22.5% of 1:1 over 0.2"
-;   (this value was used for a long time with good results)
-;   4.6 => no erosion factor, 1:1 head movement related to display
-;   4.6/6 = .7666 or 23%, pretty close to the measured value of 22.5%
-;
-; Note: the current method of scaling the display is to increment by .001" every time the below
-; number of steps have been executed. This method is inaccurate as it cannot account for the
-; fractional portion of the number of steps per thousandth. A new method will be used in the next
-; version which increments a BCD value representing the displayed value by a fractional amount
-; equal to the number of mils per step.
+                                ; decimal point is here
+STD_NO_EROSION_8    EQU 0x0     ; most significant digit (tenths position)
+STD_NO_EROSION_7    EQU 0x0
+STD_NO_EROSION_6    EQU 0x0
+STD_NO_EROSION_5    EQU 0x2
+STD_NO_EROSION_4    EQU 0x1
+STD_NO_EROSION_3    EQU 0x7
+STD_NO_EROSION_2    EQU 0x3
+STD_NO_EROSION_1    EQU 0x9
+STD_NO_EROSION_0    EQU 0x1     ; least significant digit
 
-STANDARD_RATIO1 EQU     0x0      
-STANDARD_RATIO0 EQU     0x06
+; 0.000180435 -> standard tool with 17% erosion factor
+
+                                ; decimal point is here
+STD_EROSION_8       EQU 0x0     ; most significant digit (tenths position)
+STD_EROSION_7       EQU 0x0
+STD_EROSION_6       EQU 0x0
+STD_EROSION_5       EQU 0x1
+STD_EROSION_4       EQU 0x8
+STD_EROSION_3       EQU 0x0
+STD_EROSION_2       EQU 0x4
+STD_EROSION_1       EQU 0x3
+STD_EROSION_0       EQU 0x5     ; least significant digit
                             
-; Extended Ratio
-; suggested setup is ??% blade erosion for wall reduction?
-; was 0xdc for 1/4 motor step
 
-EXTENDED_RATIO1  EQU     0x0
-EXTENDED_RATIO0  EQU     0x37
+; .000023774 -> extended tool with no erosion factor
+
+                                ; decimal point is here
+EXT_NO_EROSION_8    EQU 0x0     ; most significant digit (tenths position)
+EXT_NO_EROSION_7    EQU 0x0
+EXT_NO_EROSION_6    EQU 0x0
+EXT_NO_EROSION_5    EQU 0x0
+EXT_NO_EROSION_4    EQU 0x2
+EXT_NO_EROSION_3    EQU 0x3
+EXT_NO_EROSION_2    EQU 0x7
+EXT_NO_EROSION_1    EQU 0x7
+EXT_NO_EROSION_0    EQU 0x4     ; least significant digit
+
+; 0.000019732 -> extended tool with 17% erosion factor
+
+                                ; decimal point is here
+EXT_EROSION_8       EQU 0x0     ; most significant digit (tenths position)
+EXT_EROSION_7       EQU 0x0
+EXT_EROSION_6       EQU 0x0
+EXT_EROSION_5       EQU 0x0
+EXT_EROSION_4       EQU 0x1
+EXT_EROSION_3       EQU 0x9
+EXT_EROSION_2       EQU 0x7
+EXT_EROSION_1       EQU 0x3
+EXT_EROSION_0       EQU 0x2     ; least significant digit
 
 ;--------------------------------------------------------------------------------------------------
 
@@ -568,14 +629,27 @@ BLINK_ON_FLAG			EQU		0x01
     pwmPolarity             ; polarity of the PWM output -- only lsb used
     pwmCheckSum             ; used to verify PWM values read from eeprom
 
-    ratio1                  ; stores the number of motor steps per 0.001"
-    ratio0                  ; this is used to reload preScaler
-                            
-    ratio_neg1              ; negated value of ratio
-    ratio_neg0                  
+
+    ; number of inches per motor step -- used to update the depth display for each step
+    ; unpacked BCD decimal value, each can be 0-9
+    ; this is a fractional value, these digits are to the right of the decimal point
+                            ; decimal point is here
+    ratio8                  ; most significant digit (tenths position)
+    ratio7
+    ratio6
+    ratio5
+    ratio4
+    ratio3
+    ratio2                  
+    ratio1
+    ratio0                  ; least significant digits
+
+    ratio_neg2              ; negate ratio value (still needed?)
+    ratio_neg1              ; this may not work anymore as value is now BCD
+    ratio_neg0              ; see ratio2 for details
 
     preScaler1              ; scales the change of position variable to match actual actual movement
-    preScaler0
+    preScaler0              ; debug mks -- remove this?
 
     debounce1               ; switch debounce timer decremented by the interrupt routine
     debounce0
@@ -902,10 +976,6 @@ setup:
     clrf    buttonState     ; zero various variables
     clrf    preScaler1
     clrf    preScaler0
-    clrf    ratio1
-    clrf    ratio0
-    clrf    ratio_neg1
-    clrf    ratio_neg0
 
     call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
 
@@ -2023,7 +2093,7 @@ skipSB1:
 ;
 ; W contains address of first byte of the variable.
 ;
-; Uses FSR, W
+; Uses FSR0, W
 ;
 
 zeroQuad:
@@ -2141,10 +2211,14 @@ LoopDEMM1:
 
     bcf     flags,EXTENDED_MODE ; set flag to 0
 
-    movlw   STANDARD_RATIO1
-    movwf   ratio1           
-    movlw   STANDARD_RATIO0
-    movwf   ratio0           ; sets the number of motor steps per 0.001"
+    ; copy value for the standard tool to the ratio variable
+
+    movlw   STD_EROSION_8   ; source
+    movwf   FSR0
+    movlw   ratio8          ; destination
+    movwf   FSR1
+    movlw   .9              ; number of bytes
+    call    copyBytes
     
     ; standard head mode values
 
@@ -2164,10 +2238,14 @@ skipDEMM6:
 
     bsf     flags,EXTENDED_MODE ; set flag to 1
 
-    movlw   EXTENDED_RATIO1
-    movwf   ratio1          ; sets the number of motor steps per 0.001"
-    movlw   EXTENDED_RATIO0
-    movwf   ratio0          ; sets the number of motor steps per 0.001"
+    ; copy value for the extended tool to the ratio variable
+
+    movlw   EXT_EROSION_8   ; source
+    movwf   FSR0
+    movlw   ratio8          ; destination
+    movwf   FSR1
+    movlw   .9              ; number of bytes
+    call    copyBytes
 
     ; extended head values
 
@@ -2569,7 +2647,7 @@ skipDMMP25:
 ; position contains current height of the cutting blade
 ; depth contains the desired depth of the cut
 ;
-; Uses W, FSR, PCLATH, TMR0, OPTION_REG, preScaler,
+; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, preScaler,
 ; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
 ;
 ; For notch cutting mode switch out the smart code on retract.
@@ -2883,7 +2961,7 @@ setupCutNotchAndCycleTest:
 ;
 ; On entry:
 ;
-; Uses W, FSR, PCLATH, TMR0, OPTION_REG, preScaler,
+; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, preScaler,
 ; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
 ;
 
@@ -3273,7 +3351,7 @@ wallModeAS:
 processValueAS:
 
     ; convert speedValue from 1-9 to 0x01-0x11 and store in sparkLevel and Notch or Wall
-    ; variable (pointed by FSR) -- see notes in function header for details
+    ; variable (pointed by FSR0) -- see notes in function header for details
 
     movlw   0x01
     subwf   speedValue,W
@@ -3362,7 +3440,7 @@ apuLoop1:
     movlw   CURRENT_LIMIT_POT_INCREMENT     ; add an increment for each count of Power Level
     addwf   hiCurrentLimitPot,F
 
-    decfsz  scratch0
+    decfsz  scratch0,F
     goto    apuLoop1
 
 apuExit:
@@ -3441,7 +3519,7 @@ pulseMotorUpWithDelay:
 ;   or
 ;       bsf     MOTOR,DIR_SEL
 ;
-; Uses W, FSR, PCLATH, scratch0, scratch1, scratch2, scratch3
+; Uses W, FSR0, PCLATH, scratch0, scratch1, scratch2, scratch3
 ;
 ; NOTE: The delay value of .15 worked for both standard and extended heads.  The cut rate
 ; for the extended head was about 50% too slow compared to desired rate of 0.001 per minute.
@@ -3485,7 +3563,7 @@ pulseMotorNoDelay:
 ;
 ; This function allows the user to set the depth of the cut.
 ; 
-; Uses W, FSR, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState, buttonPrev,
+; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState, buttonPrev,
 ; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
 ; 
 
@@ -3577,8 +3655,8 @@ endSD:
 ; the up or down switch is pressed (or toggled), the mode will flip.  Pressing the Reset/Enter
 ; button will save the mode and exit.
 ; 
-; wip mks - update Uses W, FSR, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState, buttonPrev,
-; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
+; wip mks - update Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState,
+;  buttonPrev, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
 ; 
 
 setCutMode:
@@ -3654,7 +3732,7 @@ skip_dwnSCM:
 ; scratch7 = memory address of the digit
 ; cursorPos = screen location of the digit
 ;
-; Uses W, FSR, buttonState, buttonPrev, cursorPos
+; Uses W, FSR0, buttonState, buttonPrev, cursorPos
 ;     scratch0, scratch1, scratch2, scratch3, scratch7
 ;
 
@@ -3746,8 +3824,8 @@ updateABD:
 ; exits the Jog Mode, in "Setup" mode, the Reset/Enter/Zero button zeroes the displayed position
 ; of the height.
 ; 
-; Uses W, FSR, PCLATH, TMR0, OPTION_REG, cursorPos, flags, position buttonState, buttonPrev, preScaler
-; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6
+; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, flags, position buttonState, buttonPrev,
+; preScaler scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6
 ;
 
 jogMode:
@@ -3928,7 +4006,7 @@ exitJM:
 ;
 ; Cursor should be positioned at desired print location of the LCD
 ;
-; Uses W, FSR, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4
+; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4
 ;
 
 displayPos:
@@ -4234,7 +4312,7 @@ line4SLO:                   ; don't move cursor if at the bottom
 ;
 ; W contains address of BCD variable.
 ;
-; Uses W, FSR, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5
+; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5
 ;
 
 displayBCDVar:
@@ -4353,7 +4431,7 @@ displaySpeedAndPower:
 ;
 ; On return Z bit is set if value is zero, cleared otherwise.
 ;
-; Uses W, FSR scratch0
+; Uses W, FSR0, scratch0
 ;
 
 isZero:
@@ -4547,7 +4625,7 @@ L13:
 ;
 ; Returns C = 1 if Pos >= YQ.
 ;
-; Uses W, FSR
+; Uses W, FSR0
 ;
 
 isPosGtYQ:
@@ -4604,7 +4682,7 @@ isPosGtYQ:
 ;
 ; W = address of value to be incremented.
 ;
-; Uses W, FSR, preScaler, scratch0
+; Uses W, FSR0, preScaler, scratch0
 ;
 
 incBCDVar:
@@ -4680,7 +4758,7 @@ negativeIBV:
 ;
 ; W = address of value to be decremented.
 ;
-; Uses W, FSR, preScaler, scratch0
+; Uses W, FSR0, preScaler, scratch0
 ;
 
 decBCDVar:
@@ -4753,7 +4831,7 @@ negativeDBV:
 ;
 ; W = address of value to be incremented.
 ;
-; Uses W, FSR
+; Uses W, FSR0
 ;
 
 incBCDAbs:
@@ -4764,7 +4842,7 @@ incBCDAbs:
     movlw   .1
     addwf   INDF0,F         ; add one to digit 0
     movlw   .10
-    subwf   INDF0,W          ; compare with 9
+    subwf   INDF0,W          ; compare with 10
     btfss   STATUS,C       
     return                  ; return if borrow (C = 1), digit < 10
 
@@ -4774,7 +4852,7 @@ incBCDAbs:
     movlw   .1
     addwf   INDF0,F         ; add one to digit 1
     movlw   .10
-    subwf   INDF0,W         ; compare with 9
+    subwf   INDF0,W         ; compare with 10
     btfss   STATUS,C       
     return                  ; return if borrow (C = 1), digit < 10
    
@@ -4784,7 +4862,7 @@ incBCDAbs:
     movlw   .1
     addwf   INDF0,F         ; add one to digit 2
     movlw   .10
-    subwf   INDF0,W         ; compare with 9
+    subwf   INDF0,W         ; compare with 10
     btfss   STATUS,C       
     return                  ; return if borrow (C = 1), digit < 10
 
@@ -4794,7 +4872,7 @@ incBCDAbs:
     movlw   .1
     addwf   INDF0,F         ; add one to digit 3
     movlw   .10
-    subwf   INDF0,W         ; compare with 9
+    subwf   INDF0,W         ; compare with 10
     btfss   STATUS,C       
     return                  ; return if borrow (C = 1), digit < 10
 
@@ -4817,7 +4895,7 @@ incBCDAbs:
 ;
 ; W = address of value to be incremented.
 ;
-; Uses W, FSR
+; Uses W, FSR0
 ;
 
 decBCDAbs:
@@ -4867,6 +4945,95 @@ decBCDAbs:
     return
     
 ; end of decBCDAbs
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; copyBytes
+;
+; Copies the number of bytes specified by W from FSR0 to FSR1.
+;
+; Uses W, FSR0, FSR1, scratch1
+;
+; On entry:
+;
+; W contains the number of bytes to copy
+; FSR0 points to MSB of source bytes
+; FSR1 points to MSB of destination bytes
+;
+
+copyBytes:
+
+    movwf   scratch1        ; use scratch variable as loop counter
+
+cBLoop1:
+
+    movf    INDF0,W         ; copy each byte
+    movwf   INDF1
+
+    decfsz  scratch1,F
+    goto    cBLoop1
+
+    return
+
+; end of copyBytes
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; addBCDVars
+;
+; Adds two unpacked BCD variables together, ignoring sign.
+;
+; Uses W, FSR0, FSR1, scratch1
+;
+; On entry:
+;
+; W contains the number of digits in the unpacked BCD variables
+; FSR0 points to MSB of operand1/destination variable
+; FSR1 points to MSB of operand2/variable
+;
+
+; debug mks -- zzz -- remove movlw .6 after first one?
+
+; wip mks
+; increase size of display depth variable to 9 bytes
+; add variables for depth scale constants
+; remove pop macros
+
+addBCDVars:
+
+    movwf   scratch1        ; use scratch variable as loop counter
+
+    addwf   FSR0L,F         ; point to digit 0 of operand 1
+
+    addwf   FSR1L,F         ; point to digit 0 of operand 2
+
+    bcf     STATUS,C        ; clear the carry bit for the first addition
+
+aB6BV1Loop1:
+
+    movf    INDF1,W          ; add digit of the two operands
+    addwf   INDF0,F
+    movlw   .10
+    subwf   INDF0,W         ; compare with 10
+    btfss   STATUS,C
+    goto    aB6BV1          ; no carry if borrow (C = 1), digit < 10
+
+    clrf    INDF0           ; wraps to 0 after 9; carry bit set by the compare with 10
+
+aB6BV1:
+
+    decf    FSR0L,F         ; point to next digit
+    decf    FSR1L,F
+
+    decfsz  scratch1,F
+    goto    aB6BV1Loop1
+
+    ; carry from most significant digit will be ignored if value overflows
+    ; (should never happen, hardware can't travel that distance)
+
+    return
+
+; end of addBCDVars
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
