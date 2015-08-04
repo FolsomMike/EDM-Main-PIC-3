@@ -999,8 +999,6 @@ initializeOutputs:
 ;--------------------------------------------------------------------------------------------------
 ; setupClock
 ;
-; Saves the flags value to eeprom.
-;
 ; Sets up the system clock source and frequency.
 ;
 ; Assumes clock related configuration bits are set as follows:
@@ -1008,6 +1006,8 @@ initializeOutputs:
 ;   _FOSC_INTOSC,  _CPUDIV_NOCLKDIV, _PLLMULT_4x, _PLLEN_DISABLED
 ;
 ; Assumes all programmable clock related options are at Reset default values.
+;
+; NOTE: Adjust I2C baud rate generator value when Fosc is changed.
 ;
 
 setupClock:
@@ -5438,8 +5438,8 @@ readByteFromEEprom1ViaI2C:
 
     call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
 
-    banksel SSPCON2
-    bsf     SSPCON2,RCEN
+    banksel SSP1CON2
+    bsf     SSP1CON2,RCEN
 
     call    waitForSSP1IFHighThenClearIt;    wait for high flag upon reception completion
 
@@ -5448,14 +5448,14 @@ readByteFromEEprom1ViaI2C:
     banksel scratch0
     movwf   scratch0
 
-    banksel SSPCON2                 ; send NACK to terminate read
-    bsf     SSPCON2,ACKDT           ; send high bit (NACK)
-    bsf     SSPCON2,ACKEN           ; enable NACK transmission
+    banksel SSP1CON2                ; send NACK to terminate read
+    bsf     SSP1CON2,ACKDT          ; send high bit (NACK)
+    bsf     SSP1CON2,ACKEN          ; enable NACK transmission
 
     call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon NACK transmission complete
 
-    banksel SSPCON2
-    bcf     SSPCON2,ACKDT           ; reset to send ACKs
+    banksel SSP1CON2
+    bcf     SSP1CON2,ACKDT          ; reset to send ACKs
 
     call    generateI2CStop
 
@@ -5496,8 +5496,8 @@ wfewcf1:
 
     call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
 
-    banksel SSPCON2
-    btfsc   SSPCON2,ACKSTAT         ; check for low ACK from slave, repeat loop if NACK
+    banksel SSP1CON2
+    btfsc   SSP1CON2,ACKSTAT        ; check for low ACK from slave, repeat loop if NACK
     goto    wfewcf1
 
     return
@@ -5513,8 +5513,8 @@ wfewcf1:
 
 generateI2CStart:
 
-    banksel SSPCON2
-    bsf     SSPCON2,SEN
+    banksel SSP1CON2
+    bsf     SSP1CON2,SEN
 
     return
 
@@ -5529,8 +5529,8 @@ generateI2CStart:
 
 generateI2CRestart:
 
-    banksel SSPCON2
-    bsf     SSPCON2,RSEN
+    banksel SSP1CON2
+    bsf     SSP1CON2,RSEN
 
     return
 
@@ -5545,8 +5545,8 @@ generateI2CRestart:
 
 generateI2CStop:
 
-    banksel SSPCON2
-    bsf     SSPCON2,PEN
+    banksel SSP1CON2
+    bsf     SSP1CON2,PEN
 
     return
 
@@ -5631,8 +5631,8 @@ sendI2CByte:
 
     ; put byte in transmit buffer
 
-    banksel SSPBUF
-    movwf   SSPBUF
+    banksel SSP1BUF
+    movwf   SSP1BUF
 
     ; clear interrupt flag
 
@@ -5641,6 +5641,42 @@ sendI2CByte:
     return
 
 ; end of sendI2CByte
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; clearSSP1OV
+;
+; Clears the MSSP overflow bit to allow new bytes to be read.
+;
+; The bit is set if a byte was received before the previous byte was read from the buffer.
+;
+
+clearSSP1OV:
+
+    banksel SSP1CON1
+    bcf     SSP1CON1,SSPOV
+
+    return
+
+; end of clearSSP1OV
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; clearWCOL
+;
+; Clears the MSSP write collision bit to allow new bytes to be written
+;
+; The bit is set if a byte was placed in SSPBUF at an improper time.
+;
+
+clearWCOL:
+
+    banksel SSP1CON1
+    bcf     SSP1CON1, WCOL
+
+    return
+
+; end of clearWCOL
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -5655,16 +5691,16 @@ sendI2CByte:
 setupI2CMaster7BitMode:
 
     movlw   0x27			; set baud rate at 100kHz for oscillator frequency of 16 Mhz
-    banksel SSPADD
-    movwf   SSPADD
+    banksel SSP1ADD
+    movwf   SSP1ADD
 
-    banksel SSPCON1
-    bcf	SSPCON1,SSP1M0		; SSPM = b1000 ~ I2C Master mode, clock = FOSC / (4 * (SSPADD+1))(4)
-    bcf	SSPCON1,SSP1M1
-    bcf	SSPCON1,SSP1M2
-    bsf	SSPCON1,SSP1M3
+    banksel SSP1CON1
+    bcf	SSP1CON1,SSP1M0		; SSPM = b1000 ~ I2C Master mode, clock = FOSC / (4 * (SSPADD+1))(4)
+    bcf	SSP1CON1,SSP1M1
+    bcf	SSP1CON1,SSP1M2
+    bsf	SSP1CON1,SSP1M3
 
-    bsf	SSPCON1,SSPEN		;enables the MSSP module
+    bsf	SSP1CON1,SSPEN		;enables the MSSP module
 
     return
 
@@ -5860,7 +5896,7 @@ getStringChar:
     incf    scratch0,F      ; increment to index properly
     movwf   scratch2        ; store character selector
 
-string0:    ; "OPT AutoNotcher Rx.x"
+string0:    ; "OPT AutoNotcher x.x"
 
     decfsz  scratch0,F      ; count down until desired string reached
     goto    string1         ; skip to next string if count not 0
@@ -6503,7 +6539,7 @@ string22:   ; "Normal"
 
     org     0xe00           ; skip ahead so string doesn't cross 256 byte boundary
 
-string23:   ; "Reverse"
+string23:   ; "Rev"
 
     decfsz  scratch0,F      ; count down until desired string reached
     goto    string24        ; skip to next string if count not 0
