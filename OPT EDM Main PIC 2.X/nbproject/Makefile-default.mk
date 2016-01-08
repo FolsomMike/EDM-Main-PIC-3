@@ -83,8 +83,8 @@ MP_LINKER_DEBUG_OPTION=
 # Rules for buildStep: assemble
 ifeq ($(TYPE_IMAGE), DEBUG_RUN)
 ${OBJECTDIR}/_ext/1472/OPT\ EDM\ Main\ PIC\ 2.o: ../OPT\ EDM\ Main\ PIC\ 2.asm  nbproject/Makefile-${CND_CONF}.mk
-	@${MKDIR} ${OBJECTDIR}/_ext/1472 
-	@${RM} ${OBJECTDIR}/_ext/1472/OPT\ EDM\ Main\ PIC\ 2.o.d 
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o".d 
 	@${RM} "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o" 
 	@${FIXDEPS} dummy.d -e "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.err" $(SILENT) -c ${MP_AS} $(MP_EXTRA_AS_PRE) -d__DEBUG -d__MPLAB_DEBUGGER_PK3=1 -q -p$(MP_PROCESSOR_OPTION)  -l\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.lst\" -e\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.err\" $(ASM_OPTIONS)   -o\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o\" \"../OPT EDM Main PIC 2.asm\" 
 	@${DEP_GEN} -d "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o"
@@ -92,8 +92,8 @@ ${OBJECTDIR}/_ext/1472/OPT\ EDM\ Main\ PIC\ 2.o: ../OPT\ EDM\ Main\ PIC\ 2.asm  
 	
 else
 ${OBJECTDIR}/_ext/1472/OPT\ EDM\ Main\ PIC\ 2.o: ../OPT\ EDM\ Main\ PIC\ 2.asm  nbproject/Makefile-${CND_CONF}.mk
-	@${MKDIR} ${OBJECTDIR}/_ext/1472 
-	@${RM} ${OBJECTDIR}/_ext/1472/OPT\ EDM\ Main\ PIC\ 2.o.d 
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o".d 
 	@${RM} "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o" 
 	@${FIXDEPS} dummy.d -e "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.err" $(SILENT) -c ${MP_AS} $(MP_EXTRA_AS_PRE) -q -p$(MP_PROCESSOR_OPTION)  -l\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.lst\" -e\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.err\" $(ASM_OPTIONS)   -o\"${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o\" \"../OPT EDM Main PIC 2.asm\" 
 	@${DEP_GEN} -d "${OBJECTDIR}/_ext/1472/OPT EDM Main PIC 2.o"
