@@ -2125,7 +2125,7 @@ zeroQuad:
 ;
 ; Menu display:
 ;
-; "OPT AutoNotcher Rx.x" 
+; "OPT AutoNotcher x.x" 
 ;
 ; 0x1, 0xC0
 ; "CHOOSE CONFIGURATION"
@@ -2160,7 +2160,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
-    movlw   .0              ; "OPT AutoNotcher Rx.x"
+    movlw   .0              ; "OPT AutoNotcher x.x"
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
