@@ -599,11 +599,6 @@ BLINK_ON_FLAG			EQU		0x01
 	debug0					; debug mks - use a scratch variable instead?
 	debug1					; debug mks - use a scratch variable instead?
 
-    zero3                   ; MSByte zero location for the electrode in BCD digits
-    zero2
-    zero1
-    zero0                   ; LSB    
-
  endc
 
 ;-----------------
@@ -962,9 +957,6 @@ setup:
     movlw   depth10
     call    zeroQuad        ; clear the depth position variable
     clrf    depthSign       ; set sign positive
-
-    movlw   zero3
-    call    zeroQuad        ; clear the zero variable
 
     clrf    buttonState     ; zero various variables
     clrf    preScaler1
