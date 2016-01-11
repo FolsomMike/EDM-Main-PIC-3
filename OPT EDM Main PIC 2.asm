@@ -722,6 +722,7 @@ BLINK_ON_FLAG			EQU		0x01
     depth2                  
     depth1
     depth0                  ; least significant digit
+    depthSign               ; zero if value is positive or zero, non-zero if negative
 
     ; Target depth for electrode. This is the distance at which to stop cutting.
     ; unpacked BCD decimal value, each can be 0-9
@@ -4992,7 +4993,7 @@ cBLoop1:
 ; addBCDVars
 ;
 ; Adds two unpacked BCD variables together, ignoring sign.
-; Carry from most significant digit will be ignored if value overflows.
+; Carry from most significant digit will be ignored.
 ;
 ; Uses W, FSR0, FSR1, scratch1
 ;
@@ -5020,11 +5021,11 @@ aB6BV1Loop1:
     moviw   FSR1--          ; add digit of the two operands
     addwfc  INDF0,F
     movlw   .10
-    subwf   INDF0,W         ; compare with 10 (W = f - W)
+    subwf   INDF0,W         ; compare with .10 (W = f - W)
     btfss   STATUS,C
-    goto    aB6BV1          ; no carry if borrow (C = 1), digit < 10
+    goto    aB6BV1          ; no carry if borrow (C = 1) ~ digit < .10
 
-    movlw   .10             ; adjust digit below 10
+    movlw   .10             ; adjust digit to valid BCD
     subwf   INDF0,F         ; (F = f - W) (this will always leave Carry bit set to carry over)
 
 aB6BV1:
@@ -5034,11 +5035,63 @@ aB6BV1:
     decfsz  scratch1,F
     goto    aB6BV1Loop1
 
-    ; carry from most significant digit will be ignored if value overflows
+    ; any carry from most significant digit will be ignored
 
     return
 
 ; end of addBCDVars
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; subtractBCDVars
+;
+; Subtracts two unpacked BCD variables, ignoring sign.
+; Borrow to most significant digit will be ignored.
+;
+; Uses W, FSR0, FSR1, scratch1
+;
+; On entry:
+;
+; W contains the number of digits in the unpacked BCD variables
+; FSR0 points to MSB of operand1/destination variable
+; FSR1 points to MSB of operand2/variable
+; destination(operand1) = operand1 - operand2
+
+subtractBCDVars:
+
+    banksel scratch1
+
+    movwf   scratch1        ; use scratch variable as loop counter
+
+    decf    WREG,F          ; adjust for use to move to digit 0
+    addwf   FSR0L,F         ; point to digit 0 of operand 1
+    addwf   FSR1L,F         ; point to digit 0 of operand 2
+
+    bsf     STATUS,C        ; set the carry/borrow bit for the first subtraction (no borrow)
+
+sB6BV1Loop1:
+
+    moviw   FSR1--          ; subtract digit of the two operands
+    subwfb  INDF0,F
+    btfss   INDF0,7         ; if bit 7 set, result is negative and requires adjustment
+    goto    sB6BV1          ; positive result needs no adjustment
+
+    movlw   .10             ; adjust digit to valid BCD
+    addwf   INDF0,F
+    bcf     STATUS,C        ; clear carry/borrow so it will borrow on the next subtraction
+                            ;    (the inverse of the flag is used for borrowing)
+sB6BV1:
+
+    addfsr   FSR0,-.1       ; point to next digit
+
+    decfsz  scratch1,F
+    goto    sB6BV1Loop1
+
+    ; any borrow from most significant digit will be ignored
+
+    return
+
+; end of subtractBCDVars
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -6029,6 +6082,20 @@ debugFunc1:
     movlw   .11             ; 11 digits in the operands
 
     call    addBCDVars
+
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
+
+    movlw   high target10
+    movwf   FSR1H
+    movlw   low target10
+    movwf   FSR1L
+
+    movlw   .11             ; 11 digits in the operands
+
+    call    subtractBCDVars
 
     return
 
