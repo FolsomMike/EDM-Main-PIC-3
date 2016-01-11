@@ -2737,7 +2737,6 @@ moveDownLUCL:
 
 ; voltage too high (current too low) - move cutting blade down
 
-    movlw   position3
     call    incDepth        ; going down increments the position by one step distance
 
     movlw   ' '
@@ -2772,8 +2771,7 @@ moveUpLUCL:
 ; voltage too low (current too high) - move cutting blade up
 
     call    pulseMotorUpWithDelay  	; move motor one step - delay to allow motor to move
-    
-    movlw   position3
+
     call    decDepth				; going up decrements the position by one step distance
 
     movlw   '*'
@@ -2798,7 +2796,6 @@ quickRetractCN:
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
     
-    movlw   position3
     call    decDepth				; going up decrements the position by one step distance
 
 	; Because the retract locks into a loop until the over current is cleared, the display
@@ -3037,7 +3034,6 @@ moveDownCT:
     btfsc   STATUS,Z
 	incf	debug1,F			; increment high byte
 
-    movlw   position3
     call    incDepth            ; going down increments the position by one step distance
 
     movlw   ' '
@@ -3077,8 +3073,7 @@ quickRetractCT:
     goto    exitCT          ; exit the notch cutting mode if the reset button pressed
 
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
-    
-    movlw   position3
+
     call    decDepth				; going up decrements the position by one step distance
 
 	; Because the retract locks into a loop until the starting position is reached, the display
@@ -3897,7 +3892,6 @@ loopJM:
     nop
     bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
-    movlw   position3
     call    decDepth        ; going up decrements the position by one step distance
 
     goto    updateJM        ; display the new location
@@ -3922,7 +3916,6 @@ chk_dwnJM:
     nop
     bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
-    movlw   position3
     call    incDepth        ; going down increments the position by one step distance
 
     goto    updateJM        ; display the new location
@@ -4692,6 +4685,7 @@ isPosGtYQ:
 
 incDepth:
 
+    movlw   position3
     movwf   scratch0        ; store the variable address
 
     incf    preScaler0,F    ; count up the preScaler ~ see note "incf vs decf rollover"
@@ -4764,6 +4758,7 @@ negativeIBV:
 
 decDepth:
 
+    movlw   position3
     movwf   scratch0        ; store the variable address
 
     movlw  .1
