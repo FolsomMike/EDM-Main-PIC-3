@@ -2738,7 +2738,7 @@ moveDownLUCL:
 ; voltage too high (current too low) - move cutting blade down
 
     movlw   position3
-    call    incBCDVar       ; going down increments the position
+    call    incDepth        ; going down increments the position by one step distance
 
     movlw   ' '
     movwf   scratch7
@@ -3038,7 +3038,7 @@ moveDownCT:
 	incf	debug1,F			; increment high byte
 
     movlw   position3
-    call    incBCDVar       ; going down increments the position
+    call    incDepth            ; going down increments the position by one step distance
 
     movlw   ' '
     movwf   scratch7
@@ -3923,7 +3923,7 @@ chk_dwnJM:
     bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     movlw   position3
-    call    incBCDVar       ; going down increments the position
+    call    incDepth        ; going down increments the position by one step distance
 
     goto    updateJM        ; display the new location
 
@@ -4681,22 +4681,16 @@ isPosGtYQ:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; incBCDVar
+; incDepth
 ;
-; Increments the signed unpacked BCD variable with format: d3, d2, d1, d0, sign.
-;
-; The value is prescaled with the variable preScaler - this counter will be incremented each time
-; the function is called and the BCD variable only modified when the counter reaches the value.
-; The stored in the variable ratio.  preScaler will then wrap around to 0.
+; Increments the signed unpacked BCD depth variable by one step distance.
 ;
 ; On entry:
-;
-; W = address of value to be incremented.
 ;
 ; Uses W, FSR0, preScaler, scratch0
 ;
 
-incBCDVar:
+incDepth:
 
     movwf   scratch0        ; store the variable address
 
@@ -4753,7 +4747,7 @@ negativeIBV:
 
     return
 
-; end of incBCDVar
+; end of incDepth
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
