@@ -549,25 +549,6 @@ BLINK_ON_FLAG			EQU		0x01
     pwmPolarity             ; polarity of the PWM output -- only lsb used
     pwmCheckSum             ; used to verify PWM values read from eeprom
 
-
-    ; Number of inches per motor step -- used to update the depth value for each step.
-    ; The appropriate step value for the selected head and erosion rate are copied here for
-    ; use during operation.
-    ; unpacked BCD decimal value, each can be 0-9
-    ; The decimal point is two digits from the left for all depth related values: xx.xxxxxxxxx
-
-    step10                 ; most significant digit
-    step9
-    step8
-    step7
-    step6
-    step5
-    step4
-    step3
-    step2                  
-    step1
-    step0                  ; least significant digits
-
     ratio_neg2              ; negate ratio value (still needed?)
     ratio_neg1              ; this may not work anymore as value is now BCD
     ratio_neg0              ; see ratio2 for details
@@ -628,11 +609,6 @@ BLINK_ON_FLAG			EQU		0x01
     zero2
     zero1
     zero0                   ; LSB    
-
-    depth3                  ; MSByte target cut depth for the electrode in BCD digits
-    depth2
-    depth1
-    depth0                  ; LSB    
 
  endc
 
@@ -731,7 +707,55 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock 0x120                ; starting address
 
-	block1PlaceHolder
+    ; Current depth of electrode. This is the distance travelled since last zeroing.
+    ; unpacked BCD decimal value, each can be 0-9
+    ; The decimal point is two digits from the left for all depth related values: xx.xxxxxxxxx
+
+    depth10                 ; most significant digit
+    depth9
+    depth8
+    depth7
+    depth6
+    depth5
+    depth4
+    depth3
+    depth2                  
+    depth1
+    depth0                  ; least significant digit
+
+    ; Target depth for electrode. This is the distance at which to stop cutting.
+    ; unpacked BCD decimal value, each can be 0-9
+    ; The decimal point is two digits from the left for all depth related values: xx.xxxxxxxxx
+
+    target10                ; most significant digit
+    target9
+    target8
+    target7
+    target6
+    target5
+    target4
+    target3
+    target2                  
+    target1
+    target0                 ; least significant digit
+
+    ; Number of inches per motor step -- used to update the depth value for each step.
+    ; The appropriate step value for the selected head and erosion rate are copied here for
+    ; use during operation.
+    ; unpacked BCD decimal value, each can be 0-9
+    ; The decimal point is two digits from the left for all depth related values: xx.xxxxxxxxx
+
+    step10                 ; most significant digit
+    step9
+    step8
+    step7
+    step6
+    step5
+    step4
+    step3
+    step2                  
+    step1
+    step0                  ; least significant digit
 
  endc
 
@@ -2194,8 +2218,9 @@ db1:    call    debugFunc1 ; debug mks -- remove this
     movlw   low std17Erosion
     movwf   FSR0L
 
-    clrf    FSR1H
-    movlw   step10              ; destination
+    movlw   high step10         ; destination
+    movwf   FSR1H
+    movlw   low step10
     movwf   FSR1L
 
     movlw   .11                 ; number of bytes
@@ -2226,8 +2251,9 @@ skipDEMM6:
     movlw   low ext17Erosion
     movwf   FSR0L
 
-    clrf    FSR1H
-    movlw   step10              ; destination
+    movlw   high step10         ; destination
+    movwf   FSR1H
+    movlw   low step10
     movwf   FSR1L
 
     movlw   .11                 ; number of bytes
