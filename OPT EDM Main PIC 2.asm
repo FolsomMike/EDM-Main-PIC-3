@@ -896,7 +896,7 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
 
 start:
 
-    goto    db1 ;debug mks -- remove this
+    call    debugFunc1 ; debug mks -- remove this
 
     call    setup           ; preset variables and configure hardware
 
@@ -2210,8 +2210,6 @@ LoopDEMM1:
     bcf     flags,EXTENDED_MODE ; set flag to 0
 
     ; copy value for the standard tool to the ratio variable
-
-db1:    call    debugFunc1 ; debug mks -- remove this
 
     movlw   high std17Erosion   ; source is constant in program memory
     movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
@@ -4994,6 +4992,7 @@ cBLoop1:
 ; addBCDVars
 ;
 ; Adds two unpacked BCD variables together, ignoring sign.
+; Carry from most significant digit will be ignored if value overflows.
 ;
 ; Uses W, FSR0, FSR1, scratch1
 ;
@@ -5004,44 +5003,38 @@ cBLoop1:
 ; FSR1 points to MSB of operand2/variable
 ;
 
-; debug mks -- zzz -- remove movlw .6 after first one?
-
-; wip mks
-; increase size of display depth variable to 9 bytes
-; add variables for depth scale constants
-; remove pop macros
-
 addBCDVars:
+
+    banksel scratch1
 
     movwf   scratch1        ; use scratch variable as loop counter
 
+    decf    WREG,F          ; adjust for use to move to digit 0
     addwf   FSR0L,F         ; point to digit 0 of operand 1
-
     addwf   FSR1L,F         ; point to digit 0 of operand 2
 
     bcf     STATUS,C        ; clear the carry bit for the first addition
 
 aB6BV1Loop1:
 
-    movf    INDF1,W          ; add digit of the two operands
-    addwf   INDF0,F
+    moviw   FSR1--          ; add digit of the two operands
+    addwfc  INDF0,F
     movlw   .10
-    subwf   INDF0,W         ; compare with 10
+    subwf   INDF0,W         ; compare with 10 (W = f - W)
     btfss   STATUS,C
     goto    aB6BV1          ; no carry if borrow (C = 1), digit < 10
 
-    clrf    INDF0           ; wraps to 0 after 9; carry bit set by the compare with 10
+    movlw   .10             ; adjust digit below 10
+    subwf   INDF0,F         ; (F = f - W) (this will always leave Carry bit set to carry over)
 
 aB6BV1:
 
-    decf    FSR0L,F         ; point to next digit
-    decf    FSR1L,F
+    addfsr   FSR0,-.1       ; point to next digit
 
     decfsz  scratch1,F
     goto    aB6BV1Loop1
 
     ; carry from most significant digit will be ignored if value overflows
-    ; (should never happen, hardware can't travel that distance)
 
     return
 
@@ -6023,10 +6016,27 @@ rbd3:
 
 debugFunc1:
 
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
+
+    movlw   high target10
+    movwf   FSR1H
+    movlw   low target10
+    movwf   FSR1L
+
+    movlw   .11             ; 11 digits in the operands
+
+    call    addBCDVars
+
+    return
+
     ; set scratch variables to a testing value
 
-    clrf    FSR0H
-    movlw   scratch0
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
     movwf   FSR0L
 
     banksel debug0
