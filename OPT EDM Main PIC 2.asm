@@ -599,12 +599,6 @@ BLINK_ON_FLAG			EQU		0x01
 	debug0					; debug mks - use a scratch variable instead?
 	debug1					; debug mks - use a scratch variable instead?
 
-    position3               ; MSByte position of the electrode in BCD digits
-    position2
-    position1
-    position0               ; LSB    
-    positionSign            ; sign for position variable
-
     zero3                   ; MSByte zero location for the electrode in BCD digits
     zero2
     zero1
@@ -965,9 +959,9 @@ setup:
 
     call    reallyBigDelay
     
-    movlw   position3
-    call    zeroQuad        ; clear the position variable
-    clrf    positionSign    ; set sign positive
+    movlw   depth10
+    call    zeroQuad        ; clear the depth position variable
+    clrf    depthSign       ; set sign positive
 
     movlw   zero3
     call    zeroQuad        ; clear the zero variable
@@ -3937,9 +3931,9 @@ not_dwnJM:
 
 ; set the current height as zero
 
-    movlw   position3
-    call    zeroQuad        ; clear the position variable
-    clrf    positionSign    ; set sign positive
+    movlw   depth10
+    call    zeroQuad        ; clear the depth position variable
+    clrf    depthSign       ; set sign positive
 
     call    waitLCD         ; wait until print buffer is empty    
     movlw   0xdf
@@ -4015,16 +4009,16 @@ exitJM:
 
 displayPos:
 
-        movf    positionSign,F  ; sign of position variable
+        movf    depthSign,F     ; sign of depth position variable
         btfss   STATUS,Z
         goto    negativeDP      ; jump if position is negative
 
 ; position is positive
 
         movlw   0x20
-        call    writeChar   ; display a space instead of negative sign
+        call    writeChar       ; display a space instead of negative sign
 
-        movlw   position3
+        movlw   depth9          ; currently, the MSD is not displayed (depth10)
         goto    displayBCDVar
 
 negativeDP:
@@ -4034,7 +4028,7 @@ negativeDP:
         movlw   0x2d        ; ASCII '-'
         call    writeChar   ; display a negative sign
 
-        movlw   position3
+        movlw   depth9          ; currently, the MSD is not displayed (depth10)
         goto    displayBCDVar
 
 ; end of displayPos
@@ -4637,30 +4631,30 @@ isPosGtYQ:
     movwf   FSR0L           ; point FSR to YQ
 
     movf    INDF0,W         ; compare most sig digits
-    subwf   position3,W
+    subwf   depth10,W
     btfss   STATUS,C        ; if no borrow, position3 is larger or equal
     return
     
     incf    FSR0L,F         ; compare next digit
     movf    INDF0,W
-    subwf   position2,W
+    subwf   depth9,W
     btfss   STATUS,C        ; if no borrow, position2 is larger or equal
     return
 
     incf    FSR0L,F         ; compare next digit
     movf    INDF0,W
-    subwf   position1,W
+    subwf   depth8,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
         
     incf    FSR0L,F         ; compare next digit
     movf    INDF0,W
-    subwf   position0,W
+    subwf   depth7,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
 
     bcf     STATUS,C        ; preload for less than
-    movf    positionSign,W  ; load the sign byte (affects Z flag but not C)
+    movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
     btfss   STATUS,Z        
     return                  ; if Z flag set, sign is negative, return with C bit cleared
                             ; (position < YQ)
@@ -4685,7 +4679,7 @@ isPosGtYQ:
 
 incDepth:
 
-    movlw   position3
+    movlw   depth10
     movwf   scratch0        ; store the variable address
 
     incf    preScaler0,F    ; count up the preScaler ~ see note "incf vs decf rollover"
@@ -4758,7 +4752,7 @@ negativeIBV:
 
 decDepth:
 
-    movlw   position3
+    movlw   depth10
     movwf   scratch0        ; store the variable address
 
     movlw  .1
