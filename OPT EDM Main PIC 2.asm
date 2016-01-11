@@ -954,9 +954,7 @@ setup:
 
     call    reallyBigDelay
     
-    movlw   depth10
-    call    zeroQuad        ; clear the depth position variable
-    clrf    depthSign       ; set sign positive
+    call    zeroDepth       ; clear the depth position variable
 
     clrf    buttonState     ; zero various variables
     clrf    preScaler1
@@ -2070,33 +2068,40 @@ skipSB1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; zeroQuad
+; zeroDepth
 ;
-; Zeroes the 4 byte variable addressed by value in W.
+; Zeroes the depth position variable.
 ;
 ; On entry:
-;
-; W contains address of first byte of the variable.
 ;
 ; Uses FSR0, W
 ;
 
-zeroQuad:
+zeroDepth:
 
-    movwf   FSR0L           ; point FSR to first byte
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
+
     clrw                    ; W = 0
 
-    movwf  INDF0            ; clear each byte
-    incf   FSR0L,F
-    movwf  INDF0            ; clear each byte
-    incf   FSR0L,F
-    movwf  INDF0            ; clear each byte
-    incf   FSR0L,F
-    movwf  INDF0            ; clear each byte
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++
+    movwi   FSR0++          ; clear sign
 
     return
 
-; end of zeroQuad
+; end of zeroDepth
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -3921,9 +3926,7 @@ not_dwnJM:
 
 ; set the current height as zero
 
-    movlw   depth10
-    call    zeroQuad        ; clear the depth position variable
-    clrf    depthSign       ; set sign positive
+    call    zeroDepth       ; clear the depth position variable
 
     call    waitLCD         ; wait until print buffer is empty    
     movlw   0xdf
