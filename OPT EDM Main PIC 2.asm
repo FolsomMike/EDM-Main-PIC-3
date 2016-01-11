@@ -2774,7 +2774,7 @@ moveUpLUCL:
     call    pulseMotorUpWithDelay  	; move motor one step - delay to allow motor to move
     
     movlw   position3
-    call    decBCDVar				; going up decrements the position
+    call    decDepth				; going up decrements the position by one step distance
 
     movlw   '*'
     movwf   scratch7                ; display asterisk by "Up" label
@@ -2799,7 +2799,7 @@ quickRetractCN:
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
     
     movlw   position3
-    call    decBCDVar				; going up decrements the position
+    call    decDepth				; going up decrements the position by one step distance
 
 	; Because the retract locks into a loop until the over current is cleared, the display
 	; update code is never called to show the asterisk by the "Up" label which is confusing.
@@ -3079,7 +3079,7 @@ quickRetractCT:
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
     
     movlw   position3
-    call    decBCDVar				; going up decrements the position
+    call    decDepth				; going up decrements the position by one step distance
 
 	; Because the retract locks into a loop until the starting position is reached, the display
 	; update code is never called to show the asterisk by the "Up" label which is confusing.
@@ -3898,7 +3898,7 @@ loopJM:
     bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
     movlw   position3
-    call    decBCDVar       ; going up decrements the position
+    call    decDepth        ; going up decrements the position by one step distance
 
     goto    updateJM        ; display the new location
 
@@ -4751,13 +4751,9 @@ negativeIBV:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; decBCDVar
+; decDepth
 ;
-; Decrements the signed unpacked BCD variable with format: d3, d2, d1, d0, sign.
-;
-; The value is prescaled with the variable preScaler - this counter will be decremented each time
-; the function is called and the BCD variable only modified when the counter reaches zero.  The
-; preScaler will be reloaded from the variable ratio.
+; Decrements the signed unpacked BCD depth variable by one step distance.
 ;
 ; On entry:
 ;
@@ -4766,7 +4762,7 @@ negativeIBV:
 ; Uses W, FSR0, preScaler, scratch0
 ;
 
-decBCDVar:
+decDepth:
 
     movwf   scratch0        ; store the variable address
 
@@ -4824,7 +4820,7 @@ negativeDBV:
 
     return
 
-; end of decBCDVar
+; end of decDepth
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
