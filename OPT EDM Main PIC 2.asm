@@ -596,8 +596,8 @@ BLINK_ON_FLAG			EQU		0x01
     scratch9
     scratch10
 
-	debug0					; debug mks - use a scratch variable instead?
-	debug1					; debug mks - use a scratch variable instead?
+	cycleTestRetract0		; debug mks - use a scratch variable instead?
+	cycleTestRetract1		; debug mks - use a scratch variable instead?
 
  endc
 
@@ -2985,11 +2985,9 @@ cycleTest:
 
 restartCycleCT:
 
-;debug mks - replace with scratch variables
     movlw   .0				; clear the cycle distance counter to track distance lowered
-    movwf   debug0
-	movwf   debug1
-;debug mks
+    movwf   cycleTestRetract0
+	movwf   cycleTestRetract1
 
 cycleLoopCT:
 
@@ -3016,9 +3014,9 @@ moveDownCT:
 	;count how many ticks the blade travels down before touchdown - on the up cycle this
 	;count will be used to stop the blade in approximately the original start position
 	;each time - as a cut is made, the up and down positions will move down slowly
-	incf	debug0,F			; increment low byte ~ see note "incf vs decf rollover"
+	incf	cycleTestRetract0,F	; increment low byte ~ see note "incf vs decf rollover"
     btfsc   STATUS,Z
-	incf	debug1,F			; increment high byte
+	incf	cycleTestRetract1,F	; increment high byte
 
     call    incDepth            ; going down increments the position by one step distance
 
@@ -3091,16 +3089,16 @@ quickRetractCT:
 
 skipDirSymUpdateCT:
 
-    banksel debug0
+    banksel cycleTestRetract0
 
 	; user counter to return blade to original start position
 
-    movlw   .1	            ; decrement LSByte
-    subwf   debug0,F		; see note "incf vs decf rollover"
-    btfss   STATUS,C		; did LSByte roll under (0->255)?
-	decf	debug1,F		; decrement MSByte after LSByte roll under
-	movf	debug0,W		; check MSB:LSB for zero
-	iorwf	debug1,W
+    movlw   .1                      ; decrement LSByte
+    subwf   cycleTestRetract0,F		; see note "incf vs decf rollover"
+    btfss   STATUS,C                ; did LSByte roll under (0->255)?
+	decf	cycleTestRetract1,F		; decrement MSByte after LSByte roll under
+	movf	cycleTestRetract0,W		; check MSB:LSB for zero
+	iorwf	cycleTestRetract1,W
 	btfsc	STATUS,Z
 	goto    restartCycleCT	; restart loop when counter reaches zero
 
@@ -6077,21 +6075,21 @@ debugFunc1:
     movlw   low depth10
     movwf   FSR0L
 
-    banksel debug0
+    banksel cycleTestRetract0
 
     movlw   .11         ; number of variables in buffer to set
-    movwf   debug0
+    movwf   cycleTestRetract0
     movlw   .0          ; value to increment and store in variables
-    movwf   debug1
+    movwf   cycleTestRetract1
 
 dF1Loop:
 
     movwi   FSR0++
 
-    incf    debug1,F
-    movf    debug1,W
+    incf    cycleTestRetract1,F
+    movf    cycleTestRetract1,W
 
-    decfsz  debug0,F
+    decfsz  cycleTestRetract0,F
     goto    dF1Loop
 
     return
