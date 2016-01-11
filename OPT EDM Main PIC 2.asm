@@ -292,86 +292,6 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; Step Ratio Constants
-;
-; Specifies the blade travel distance per motor step for different types of cutting heads.
-;
-; These are unpacked BCD decimal values, each digit can be 0-9.
-; This is a fractional value, these digits are to the right of the decimal point.
-;
-; Standard Reach Tool Ratio
-;
-; One motor step is 0.000217391"
-; typically, blade erosion is 17%
-;
-; For 1:1 (no erosion factor), use .000217391
-; For 17% erosion factior use .000217391 * .83 = 0.000180435
-;
-; Extended Reach Tool Ratio
-;
-; One motor step is .000023774"
-; typically, blade erosion is 17%
-;
-; For 1:1 (no erosion factor), use .000023774
-; For 17% erosion factior use .000023774 * .83 = 0.000019732
-;
-
-; .000217391 -> standard tool with no erosion factor
-
-                                ; decimal point is here
-STD_NO_EROSION_8    EQU 0x0     ; most significant digit (tenths position)
-STD_NO_EROSION_7    EQU 0x0
-STD_NO_EROSION_6    EQU 0x0
-STD_NO_EROSION_5    EQU 0x2
-STD_NO_EROSION_4    EQU 0x1
-STD_NO_EROSION_3    EQU 0x7
-STD_NO_EROSION_2    EQU 0x3
-STD_NO_EROSION_1    EQU 0x9
-STD_NO_EROSION_0    EQU 0x1     ; least significant digit
-
-; 0.000180435 -> standard tool with 17% erosion factor
-
-                                ; decimal point is here
-STD_EROSION_8       EQU 0x0     ; most significant digit (tenths position)
-STD_EROSION_7       EQU 0x0
-STD_EROSION_6       EQU 0x0
-STD_EROSION_5       EQU 0x1
-STD_EROSION_4       EQU 0x8
-STD_EROSION_3       EQU 0x0
-STD_EROSION_2       EQU 0x4
-STD_EROSION_1       EQU 0x3
-STD_EROSION_0       EQU 0x5     ; least significant digit
-                            
-
-; .000023774 -> extended tool with no erosion factor
-
-                                ; decimal point is here
-EXT_NO_EROSION_8    EQU 0x0     ; most significant digit (tenths position)
-EXT_NO_EROSION_7    EQU 0x0
-EXT_NO_EROSION_6    EQU 0x0
-EXT_NO_EROSION_5    EQU 0x0
-EXT_NO_EROSION_4    EQU 0x2
-EXT_NO_EROSION_3    EQU 0x3
-EXT_NO_EROSION_2    EQU 0x7
-EXT_NO_EROSION_1    EQU 0x7
-EXT_NO_EROSION_0    EQU 0x4     ; least significant digit
-
-; 0.000019732 -> extended tool with 17% erosion factor
-
-                                ; decimal point is here
-EXT_EROSION_8       EQU 0x0     ; most significant digit (tenths position)
-EXT_EROSION_7       EQU 0x0
-EXT_EROSION_6       EQU 0x0
-EXT_EROSION_5       EQU 0x0
-EXT_EROSION_4       EQU 0x1
-EXT_EROSION_3       EQU 0x9
-EXT_EROSION_2       EQU 0x7
-EXT_EROSION_1       EQU 0x3
-EXT_EROSION_0       EQU 0x2     ; least significant digit
-
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; Configurations, etc. for the Assembler Tools and the PIC
 
 	LIST p = PIC16F1459	;select the processor
@@ -630,23 +550,28 @@ BLINK_ON_FLAG			EQU		0x01
     pwmCheckSum             ; used to verify PWM values read from eeprom
 
 
-    ; number of inches per motor step -- used to update the depth display for each step
+    ; Number of inches per motor step -- used to update the depth value for each step.
+    ; The appropriate step value for the selected head and erosion rate are copied here for
+    ; use during operation.
     ; unpacked BCD decimal value, each can be 0-9
-    ; this is a fractional value, these digits are to the right of the decimal point
-                            ; decimal point is here
-    ratio8                  ; most significant digit (tenths position)
-    ratio7
-    ratio6
-    ratio5
-    ratio4
-    ratio3
-    ratio2                  
-    ratio1
-    ratio0                  ; least significant digits
+    ; The decimal point is two digits from the left for all depth related values: xx.xxxxxxxxx
+
+    step10                 ; most significant digit
+    step9
+    step8
+    step7
+    step6
+    step5
+    step4
+    step3
+    step2                  
+    step1
+    step0                  ; least significant digits
 
     ratio_neg2              ; negate ratio value (still needed?)
     ratio_neg1              ; this may not work anymore as value is now BCD
     ratio_neg0              ; see ratio2 for details
+                            ; debug mks -- remove this?
 
     preScaler1              ; scales the change of position variable to match actual actual movement
     preScaler0              ; debug mks -- remove this?
@@ -895,10 +820,59 @@ BLINK_ON_FLAG			EQU		0x01
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; Constants in Program Memory
+;
+; Step Ratio Constants:
+;
+; Specifies the blade travel distance per motor step for different types of cutting heads.
+;
+; These are unpacked BCD decimal values, each digit can be 0-9.
+; The decimal point is two digits from the left for all depth related values.
+;
+; Standard Reach Tool Ratio
+;
+; One motor step is 0.000217391"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000217391
+; For 17% erosion factior use .000217391 * .83 = 0.000180435
+;
+; Extended Reach Tool Ratio
+;
+; One motor step is .000023774"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000023774
+; For 17% erosion factior use .000023774 * .83 = 0.000019732
+;
+; Unpacked BCD is used for inch/pulse depth related values as it allows for the fastest math during
+; operation. The decimal point is two digits from the left for all depth related values.
+;
+; NOTE: program memory is only 14 bits wide. Using dw rather than db forces each value to fill
+; an entire 14 bit word rather than being packed two values to a word.
+;
+; 00.000217391 -> standard tool with no erosion factor ~ inches/motor pulse
+stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000180435 -> standard tool with 17% erosion factor ~ inches/motor pulse
+std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000023774 -> extended tool with no erosion factor ~ inches/motor pulse
+extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000019732 -> extended tool with 17% erosion factor ~ inches/motor pulse
+ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; end of Constants in Program Memory
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; start
 ;
 
 start:
+
+    goto    db1 ;debug mks -- remove this
 
     call    setup           ; preset variables and configure hardware
 
@@ -2125,7 +2099,7 @@ zeroQuad:
 ;
 ; Menu display:
 ;
-; "OPT AutoNotcher x.x" 
+; "OPT AutoNotcher x.x"
 ;
 ; 0x1, 0xC0
 ; "CHOOSE CONFIGURATION"
@@ -2213,11 +2187,18 @@ LoopDEMM1:
 
     ; copy value for the standard tool to the ratio variable
 
-    movlw   STD_EROSION_8   ; source
-    movwf   FSR0
-    movlw   ratio8          ; destination
-    movwf   FSR1
-    movlw   .9              ; number of bytes
+db1:    call    debugFunc1 ; debug mks -- remove this
+
+    movlw   high std17Erosion   ; source is constant in program memory
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low std17Erosion
+    movwf   FSR0L
+
+    clrf    FSR1H
+    movlw   step10              ; destination
+    movwf   FSR1L
+
+    movlw   .11                 ; number of bytes
     call    copyBytes
     
     ; standard head mode values
@@ -2240,11 +2221,16 @@ skipDEMM6:
 
     ; copy value for the extended tool to the ratio variable
 
-    movlw   EXT_EROSION_8   ; source
-    movwf   FSR0
-    movlw   ratio8          ; destination
-    movwf   FSR1
-    movlw   .9              ; number of bytes
+    movlw   high ext17Erosion   ; source is constant in program memory
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low ext17Erosion
+    movwf   FSR0L
+
+    clrf    FSR1H
+    movlw   step10              ; destination
+    movwf   FSR1L
+
+    movlw   .11                 ; number of bytes
     call    copyBytes
 
     ; extended head values
@@ -2267,9 +2253,9 @@ exitDEMM7:
 	; store the negative of ratio1:ratio0 in ratio_neg1:ratio_neg0
 	; the negative number is used to catch match when pre-scaler goes negative
 
-    movf    ratio1,W
+    movf    step1,W
     movwf   ratio_neg1
-    movf    ratio0,W
+    movf    step0,W
     movwf   ratio_neg0
 
     comf    ratio_neg0,F
@@ -4693,11 +4679,11 @@ incBCDVar:
     btfsc   STATUS,Z    
     incf    preScaler1,F
     
-    movf    ratio1,W        ; byte 1
+    movf    step1,W        ; byte 1
     subwf   preScaler1,W
     btfss   STATUS,Z         
     return
-    movf    ratio0,W        ; byte 0
+    movf    step0,W        ; byte 0
     subwf   preScaler0,W
     btfss   STATUS,Z         
     return                  ; if preScaler not maxed, don't inc BCD 
@@ -4967,8 +4953,8 @@ copyBytes:
 
 cBLoop1:
 
-    movf    INDF0,W         ; copy each byte
-    movwf   INDF1
+    moviw   FSR0++          ; copy each byte
+    movwi   FSR1++
 
     decfsz  scratch1,F
     goto    cBLoop1
@@ -6010,6 +5996,32 @@ rbd3:
 ;
 
 debugFunc1:
+
+    ; set scratch variables to a testing value
+
+    clrf    FSR0H
+    movlw   scratch0
+    movwf   FSR0L
+
+    banksel debug0
+
+    movlw   .11         ; number of variables in buffer to set
+    movwf   debug0
+    movlw   .0          ; value to increment and store in variables
+    movwf   debug1
+
+dF1Loop:
+
+    movwi   FSR0++
+
+    incf    debug1,F
+    movf    debug1,W
+
+    decfsz  debug0,F
+    goto    dF1Loop
+
+    return
+
 
     ; stuff a value into the PWM variables
 
