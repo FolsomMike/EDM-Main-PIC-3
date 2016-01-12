@@ -3991,13 +3991,21 @@ exitJM:
 ; On entry:
 ;
 ; Cursor should be positioned at desired print location of the LCD
+; Bank should point to flags.
+;
+; On exit:
+;
+; Bank will point to flags.
 ;
 ; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4
 ;
 
 displayPos:
 
+        banksel depthSign
         movf    depthSign,F     ; sign of depth position variable
+        banksel flags           ; restore bank
+
         btfss   STATUS,Z
         goto    negativeDP      ; jump if position is negative
 
@@ -4297,13 +4305,14 @@ line4SLO:                   ; don't move cursor if at the bottom
 ; On entry:
 ;
 ; W contains address of BCD variable.
+; Bank points to scratch* variables.
 ;
 ; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5
 ;
 
 displayBCDVar:
 
-    movwf   scratch5        ; store pointer
+    movwf   scratch5        ; store pointer -- debug mks remove this??
 
     movwf   FSR0L           ; point FSR at first digit
     
@@ -4658,11 +4667,17 @@ isPosGtYQ:
 ;--------------------------------------------------------------------------------------------------
 ; incDepth
 ;
-; Increments the signed unpacked BCD depth variable by one step distance.
+; Increments the signed unpacked BCD depth position variable by one step distance.
 ;
 ; On entry:
 ;
-; Uses W, FSR0, preScaler, scratch0
+; Bank should point to flags.
+;
+; On exit:
+;
+; Bank will point to flags.
+;
+; Uses W, FSR0
 ;
 
 incDepth:
@@ -4691,17 +4706,14 @@ negativeIBV:
     movf    scratch0,W      ; retrieve variable address
     call    decBCDAbs       ; decrement one
 
-    movf    scratch0,W      ; retrieve variable address
-    call    isQuadZero      ; check for zero
+    call    isDepthZero     ; check for zero
     
     btfss   STATUS,Z        
     return                  ; value is not zero
 
-    movf    scratch0,W      ; retrieve variable address
-    addlw   .4              
-    movwf   FSR0L           ; point to the sign
-    movlw   0x0
-    movwf   INDF0           ; set sign positive
+    banksel depthSign       ; set sign positive (zero value should always have positive sign)
+    clrf    depthSign
+    banksel flags           ; restore bank
 
     return
 
@@ -4711,36 +4723,34 @@ negativeIBV:
 ;--------------------------------------------------------------------------------------------------
 ; decDepth
 ;
-; Decrements the signed unpacked BCD depth variable by one step distance.
+; Decrements the signed unpacked BCD depth position variable by one step distance.
 ;
 ; On entry:
 ;
-; W = address of value to be decremented.
+; Bank should point to flags.
 ;
-; Uses W, FSR0, preScaler, scratch0
+; On exit:
+;
+; Bank will point to flags.
+;
+; Uses W, FSR0
 ;
 
 decDepth:
 
-    movlw   depth10
-    movwf   scratch0        ; store the variable address
-
-    call    isQuadZero      ; check if zero
+    call    isDepthZero     ; check if zero
     btfsc   STATUS,Z
     goto    negativeDBV     ; if it is zero, add one to decrement
 
-    movf    scratch0,W  
-    addlw   .4              
-    movwf   FSR0L           ; point to the sign
-    
-    movf    INDF0,F
+    banksel depthSign
+    movf    depthSign,F
+    banksel flags           ; restore bank
     btfss   STATUS,Z        ; check pos/neg
     goto    negativeDBV
     
 ; value is positive, so subtract one from it to decrement
 
-    movf    scratch0,W      ; retrieve variable address
-    call    decBCDAbs       ; decrement one
+    call    decBCDAbs       ; subtract one step distance from depth position
 
     return
 
@@ -4749,14 +4759,12 @@ negativeDBV:
 ; value is negative or zero so add one to it to decrement
 ; since value is negative or zero, decrementing will always result in negative
 
-    movf    scratch0,W      ; retrieve variable address
-    addlw   .4              
-    movwf   FSR0L           ; point to the sign
+    banksel depthSign
     movlw   0x01
-    movwf   INDF0           ; set sign negative
+    movwf   depthSign       ; set sign negative
+    banksel flags           ; restore bank
 
-    movf    scratch0,W      ; retrieve variable address
-    call    incBCDAbs       ; add one
+    call    incBCDAbs       ; add one step distance to depth position
 
     return
 
@@ -5025,43 +5033,69 @@ sB6BV1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; isQuadZero
+; isDepthZero
 ;
-; Checks if the four byte variable pointed to by W is zero.
+; Checks if the depth position variable is zero.
 ;
 ; On entry:
-;
-; W = address of variable to be tested
 ;
 ; On return, Z = 1 if variable is zero.
 ;
 ; Uses W, FSR
 ;
 
-isQuadZero:
+isDepthZero:
 
-    movwf   FSR0L           ; point to variable
+    movlw   high depth10    ; point to depth position variable
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
 
-    movf    INDF0,F
-    btfss   STATUS,Z        ; check for zero
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 10 for zero
     return
 
-    incf    FSR0L,F         ; next digit
-    movf    INDF0,F
-    btfss   STATUS,Z        ; check for zero
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 9 for zero
     return
 
-    incf    FSR0L,F         ; next digit
-    movf    INDF0,F
-    btfss   STATUS,Z        ; check for zero
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 8 for zero
     return
 
-    incf    FSR0L,F         ; next digit
-    movf    INDF0,F
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 7 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 6 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 5 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 4 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 3 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 2 for zero
+    return
+
+    moviw   FSR0++
+    btfss   STATUS,Z        ; check digit 1 for zero
+    return
+
+    moviw   FSR0++          ; check digit 0 for zero
 
     return
 
-; end of isQuadZero
+; end of isDepthZero
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
