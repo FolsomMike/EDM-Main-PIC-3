@@ -2330,7 +2330,7 @@ extendedModeDMM:
 
 skipDMM:
 
-; if depth not already set (=0), display this string
+; if target depth not already set (=0), display this string
 
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
@@ -2346,7 +2346,7 @@ skipDMM:
     
     goto    skipString6;
 
-; if depth already set (!=0), display the depth value
+; if target depth already set (!=0), display the target depth value
 
 skipString5:
 
@@ -2354,8 +2354,7 @@ skipString5:
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
-    movlw   depth3
-    call    displayBCDVar   ; display the depth to cut
+    call    displayTarget   ; display the target depth to cut
     call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
 
 skipString6:
@@ -2889,8 +2888,7 @@ setupCutNotchAndCycleTest:
     call    printString     ; "Down  Stop>"
     call    waitLCD         ; wait until buffer printed    
 
-    movlw   depth3
-    call    displayBCDVar   ; display the depth to cut
+    call    displayTarget   ; display the target depth to cut
 
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
@@ -3567,8 +3565,7 @@ setDepth:
     movlw   0xc4
     call    writeControl    ; position back at line 2 column 4
 
-    movlw   depth3
-    call    displayBCDVar   ; display the variable over the "0.000 inches" string so it can be edited
+    call    displayTarget   ; display the value over the "0.000 inches" string so it can be edited
 
     movlw   0xc4
     call    writeControl
@@ -3995,8 +3992,7 @@ displayPos:
         movlw   0x20
         call    writeChar       ; display a space instead of negative sign
 
-        movlw   depth9          ; currently, the MSD is not displayed (depth10)
-        goto    displayBCDVar
+        goto    displayDepth
 
 negativeDP:
 
@@ -4005,8 +4001,7 @@ negativeDP:
         movlw   0x2d        ; ASCII '-'
         call    writeChar   ; display a negative sign
 
-        movlw   depth9          ; currently, the MSD is not displayed (depth10)
-        goto    displayBCDVar
+        goto    displayDepth
 
 ; end of displayPos
 ;--------------------------------------------------------------------------------------------------
@@ -4278,26 +4273,60 @@ line4SLO:                   ; don't move cursor if at the bottom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; displayDepth
+;
+; Displays 4 digits of the depth position variable in format x.xxx.
+; The most significant digit is not displayed, nor are the least significant digits.
+;
+
+displayDepth:
+
+    movlw   high depth9         ; depth10 not displayed
+    movwf   FSR1H
+    movlw   low depth9
+    movwf   FSR1L
+
+    goto    displayBCDVar
+
+; end of displayDepth
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; displayTarget
+;
+; Displays 4 digits of the target depth variable in format x.xxx.
+; The most significant digit is not displayed, nor are the least significant digits.
+;
+
+displayTarget:
+
+    movlw   high target9        ; target10 not displayed
+    movwf   FSR1H
+    movlw   low target9
+    movwf   FSR1L
+
+    goto    displayBCDVar
+
+; end of displayTarget
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; displayBCDVar
 ;
-; Displays the 4 digit BCD variable addressed by value in W.  A decimal point is placed between
+; Displays 4 digits of the BCD variable addressed by FSR1.  A decimal point is placed between
 ; the first and second digits
 ;
 ; On entry:
 ;
-; W contains address of BCD variable.
+; FSR1 contains address of BCD variable.
 ; Bank points to scratch* variables.
 ;
 ; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5
 ;
 
 displayBCDVar:
-
-    movwf   scratch5        ; store pointer -- debug mks remove this??
-
-    movwf   FSR0L           ; point FSR at first digit
     
-    movf    INDF0,W
+    moviw   FSR1++
     addlw   0x30            ; convert BCD digit to ASCII
     call    writeChar       ; write the first digit
 
@@ -4309,11 +4338,7 @@ displayBCDVar:
 
 loopDBV1:
 
-    incf    scratch5,F      ; move to next digit    
-    movf    scratch5,W
-    movwf   FSR0L           ; point FSR to next digit
-
-    movf    INDF0,W
+    movwi   FSR1++
     addlw   0x30            ; convert BCD digit to ASCII
     call    writeChar       ; write the first digit
 
@@ -4663,29 +4688,21 @@ isPosGtYQ:
 
 incDepth:
 
-    movlw   depth10
-    movwf   scratch0        ; store the variable address
-
-    addlw   .4              
-    movwf   FSR0L           ; point to the sign
-    
-    movf    INDF0,F
+    banksel depthSign
+    movf    depthSign,F
+    banksel flags           ; restore bank
     btfss   STATUS,Z        ; check pos/neg
     goto    negativeIBV
 
-; value is positive or 0 (sign is always + for zero), so add one to it to increment
+; value is positive or 0 (sign is always + for zero), so add to increment
 
-    movf    scratch0,W      ; retrieve variable address
-    call    incBCDAbs       ; add one
-
-    return
+    goto    incDepthAbs     ; add one step distance
 
 negativeIBV:
 
-; value is negative so subtract one to increment it
+; value is negative so subtract to increment it
 
-    movf    scratch0,W      ; retrieve variable address
-    call    decBCDAbs       ; decrement one
+    call    decDepthAbs     ; subtract one step distance
 
     call    isDepthZero     ; check for zero
     
@@ -4721,23 +4738,21 @@ decDepth:
 
     call    isDepthZero     ; check if zero
     btfsc   STATUS,Z
-    goto    negativeDBV     ; if it is zero, add one to decrement
+    goto    negativeDBV     ; if it is zero, add to decrement
 
     banksel depthSign
     movf    depthSign,F
     banksel flags           ; restore bank
     btfss   STATUS,Z        ; check pos/neg
-    goto    negativeDBV
+    goto    negativeDBV     ; if depth is negative, add to decrement
     
-; value is positive, so subtract one from it to decrement
+; value is positive, so subtract to decrement
 
-    call    decBCDAbs       ; subtract one step distance from depth position
-
-    return
+    goto    decDepthAbs     ; subtract one step distance from depth position
 
 negativeDBV:
 
-; value is negative or zero so add one to it to decrement
+; value is negative or zero so add to decrement
 ; since value is negative or zero, decrementing will always result in negative
 
     banksel depthSign
@@ -4745,7 +4760,7 @@ negativeDBV:
     movwf   depthSign       ; set sign negative
     banksel flags           ; restore bank
 
-    call    incBCDAbs       ; add one step distance to depth position
+    call    incDepthAbs     ; add one step distance to depth position
 
     return
 
@@ -4753,18 +4768,16 @@ negativeDBV:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; incBCDAbs
+; incDepthAbs
 ;
-; Adds one to BCD variable ignoring its sign.
+; Adds one step distance to depth position BCD variable ignoring its sign.
 ;
 ; On entry:
-;
-; W = address of value to be incremented.
 ;
 ; Uses W, FSR0
 ;
 
-incBCDAbs:
+incDepthAbs:
 
     addlw   .3              ; point to digit 0
     movwf   FSR0L           ; point FSR to variable
@@ -4813,22 +4826,20 @@ incBCDAbs:
 
     return
     
-; end of incBCDAbs
+; end of incDepthAbs
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; decBCDAbs
+; decDepthAbs
 ;
-; Subtracts one from BCD variable ignoring its sign.
+; Subtracts one step distance tfrom depth position BCD variable ignoring its sign.
 ;
 ; On entry:
-;
-; W = address of value to be incremented.
 ;
 ; Uses W, FSR0
 ;
 
-decBCDAbs:
+decDepthAbs:
 
     addlw   .3              ; point to digit 0
     movwf   FSR0L           ; point FSR to variable
@@ -4874,7 +4885,7 @@ decBCDAbs:
 
     return
     
-; end of decBCDAbs
+; end of decDepthAbs
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
