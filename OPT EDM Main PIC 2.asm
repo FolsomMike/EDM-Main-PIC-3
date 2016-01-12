@@ -458,6 +458,11 @@ UPDATE_DISPLAY  EQU     0x5
 UPDATE_DIR_SYM  EQU     0x6
 MOTOR_DIR_MODE	EQU     0x7
 
+; bits in flags2 variable
+
+EROSION_MODE    EQU     0x0
+
+
 ; bits in LCDFlags
 
 LCDBusy         EQU     0x00
@@ -506,6 +511,15 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit 5: 0 = no display update, 1 = display update (used by various functions)
 							; bit 6: 0 = no update direction symbol, 1 = update (used by various functions)
 							; bit 7: 0 = normal motor rotation, 1 = reverse motor direction
+
+    flags2                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
+                            ; bit 1:
+                            ; bit 2:
+                            ; bit 3:
+                            ; bit 4:
+                            ; bit 5:
+                            ; bit 6:
+                            ; bit 7:
 
     menuOption              ; tracks which menu option is currently selected
 
@@ -781,6 +795,7 @@ BLINK_ON_FLAG			EQU		0x01
     eeDepth0
 
     eeFlags
+    eeFlags2
 
     eeSparkLevelNotch       ; NOTE: keep eeSparkLevelNotch and eeSparkLevelWall contiguous
     eeSparkLevelWall
@@ -1602,7 +1617,7 @@ saveSparkLevelsToEEprom:
 ;--------------------------------------------------------------------------------------------------
 ; readFlagsFromEEprom
 ;
-; Reads the flags value from eeprom.
+; Reads the flags and flags2 values from eeprom.
 ;
 
 readFlagsFromEEprom:
@@ -1614,8 +1629,8 @@ readFlagsFromEEprom:
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
-    movlw   .1
-    movwf   eepromCount     ; read 1 byte
+    movlw   .2
+    movwf   eepromCount     ; read 2 bytes
     call    readFromEEprom
 
     return
@@ -1626,7 +1641,7 @@ readFlagsFromEEprom:
 ;--------------------------------------------------------------------------------------------------
 ; saveFlagsToEEprom
 ;
-; Saves the flags value to eeprom.
+; Saves the flags and flags2 values to eeprom.
 ;
 
 saveFlagsToEEprom:
@@ -1638,8 +1653,8 @@ saveFlagsToEEprom:
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
-    movlw   .1
-    movwf   eepromCount     ; write 1 byte
+    movlw   .2
+    movwf   eepromCount     ; write 2 bytes
     call    writeToEEprom
 
     return
@@ -2191,17 +2206,31 @@ LoopDEMM1:
 
     bcf     flags,EXTENDED_MODE ; set flag to 0
 
-    ; copy value for the standard tool to the ratio variable
+    ; copy value for the standard tool to the inches/motor step variable
 
-    movlw   high std17Erosion   ; source is constant in program memory
+    movlw   high step10         ; destination variable
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
+
+    btfsc   flags2,EROSION_MODE
+    goto    useStdErosionFactor
+
+    movlw   high stdNoErosion   ; source is constant in program memory -- no erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low stdNoErosion
+    movwf   FSR0L
+
+    goto    copyStdStepValue
+
+useStdErosionFactor:
+
+    movlw   high std17Erosion   ; source is constant in program memory -- with erosion factor
     movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
     movlw   low std17Erosion
     movwf   FSR0L
 
-    movlw   high step10         ; destination
-    movwf   FSR1H
-    movlw   low step10
-    movwf   FSR1L
+copyStdStepValue:
 
     movlw   .11                 ; number of bytes
     call    copyBytes
@@ -2224,17 +2253,26 @@ skipDEMM6:
 
     bsf     flags,EXTENDED_MODE ; set flag to 1
 
-    ; copy value for the extended tool to the ratio variable
+    ; copy value for the extended tool to the inches/motor step variable
 
-    movlw   high ext17Erosion   ; source is constant in program memory
+    btfsc   flags2,EROSION_MODE
+    goto    useExtErosionFactor
+
+    movlw   high extNoErosion   ; source is constant in program memory -- no erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low extNoErosion
+    movwf   FSR0L
+
+    goto    copyExtStepValue
+
+useExtErosionFactor:
+
+    movlw   high ext17Erosion   ; source is constant in program memory -- with erosion factor
     movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
     movlw   low ext17Erosion
     movwf   FSR0L
 
-    movlw   high step10         ; destination
-    movwf   FSR1H
-    movlw   low step10
-    movwf   FSR1L
+copyExtStepValue:
 
     movlw   .11                 ; number of bytes
     call    copyBytes
