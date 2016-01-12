@@ -554,9 +554,6 @@ BLINK_ON_FLAG			EQU		0x01
     ratio_neg0              ; see ratio2 for details
                             ; debug mks -- remove this?
 
-    preScaler1              ; scales the change of position variable to match actual actual movement
-    preScaler0              ; debug mks -- remove this?
-
     debounce1               ; switch debounce timer decremented by the interrupt routine
     debounce0
 
@@ -957,8 +954,6 @@ setup:
     call    zeroDepth       ; clear the depth position variable
 
     clrf    buttonState     ; zero various variables
-    clrf    preScaler1
-    clrf    preScaler0
 
     call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
 
@@ -4675,24 +4670,6 @@ incDepth:
     movlw   depth10
     movwf   scratch0        ; store the variable address
 
-    incf    preScaler0,F    ; count up the preScaler ~ see note "incf vs decf rollover"
-    btfsc   STATUS,Z    
-    incf    preScaler1,F
-    
-    movf    step1,W        ; byte 1
-    subwf   preScaler1,W
-    btfss   STATUS,Z         
-    return
-    movf    step0,W        ; byte 0
-    subwf   preScaler0,W
-    btfss   STATUS,Z         
-    return                  ; if preScaler not maxed, don't inc BCD 
-
-    clrf    preScaler1
-    clrf    preScaler0      ; restart the counter
-
-    movf    scratch0,W       ; reload the variable address
-
     addlw   .4              
     movwf   FSR0L           ; point to the sign
     
@@ -4747,25 +4724,6 @@ decDepth:
 
     movlw   depth10
     movwf   scratch0        ; store the variable address
-
-    movlw  .1
-    subwf   preScaler0,F    ; count down the preScaler ~ see note "incf vs decf rollover"
-    btfss   STATUS,C
-    decf    preScaler1,F
-
-    movf    ratio_neg1,W    ; byte 1
-    subwf   preScaler1,W
-    btfss   STATUS,Z         
-    return
-    movf    ratio_neg0,W	; byte 0
-    subwf   preScaler0,W
-    btfss   STATUS,Z         
-    return                  ; if preScaler not maxed, don't dec BCD 
-
-    clrf    preScaler1
-    clrf    preScaler0      ; restart the counter
-
-    movf    scratch0,W       ; reload the variable address
 
     call    isQuadZero      ; check if zero
     btfsc   STATUS,Z
