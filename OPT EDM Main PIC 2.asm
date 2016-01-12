@@ -4774,57 +4774,24 @@ negativeDBV:
 ;
 ; On entry:
 ;
-; Uses W, FSR0
+; Uses W, FSR0, FSR1
 ;
 
 incDepthAbs:
 
-    addlw   .3              ; point to digit 0
-    movwf   FSR0L           ; point FSR to variable
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
 
-    movlw   .1
-    addwf   INDF0,F         ; add one to digit 0
-    movlw   .10
-    subwf   INDF0,W          ; compare with 10
-    btfss   STATUS,C       
-    return                  ; return if borrow (C = 1), digit < 10
+    movlw   high step10
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
 
-    clrf    INDF0           ; wraps to 0 after 9
-    
-    decf    FSR0L,F          ; digit 1
-    movlw   .1
-    addwf   INDF0,F         ; add one to digit 1
-    movlw   .10
-    subwf   INDF0,W         ; compare with 10
-    btfss   STATUS,C       
-    return                  ; return if borrow (C = 1), digit < 10
-   
-    clrf    INDF0           ; wraps to 0 after 9
+    movlw   .11             ; 11 digits in the operands
 
-    decf    FSR0L,F         ; digit 2
-    movlw   .1
-    addwf   INDF0,F         ; add one to digit 2
-    movlw   .10
-    subwf   INDF0,W         ; compare with 10
-    btfss   STATUS,C       
-    return                  ; return if borrow (C = 1), digit < 10
-
-    clrf    INDF0           ; wraps to 0 after 9
-
-    decf    FSR0L,F         ; digit 3
-    movlw   .1
-    addwf   INDF0,F         ; add one to digit 3
-    movlw   .10
-    subwf   INDF0,W         ; compare with 10
-    btfss   STATUS,C       
-    return                  ; return if borrow (C = 1), digit < 10
-
-    clrf    INDF0           ; wraps to 0 after 9
-    
-    ; if carry from most significant digit, allow to roll over 
-    ; (should never happen, hardware can't travel that distance)
-
-    return
+    goto    addBCDVars
     
 ; end of incDepthAbs
 ;--------------------------------------------------------------------------------------------------
@@ -4832,58 +4799,28 @@ incDepthAbs:
 ;--------------------------------------------------------------------------------------------------
 ; decDepthAbs
 ;
-; Subtracts one step distance tfrom depth position BCD variable ignoring its sign.
+; Subtracts one step distance from depth position BCD variable ignoring its sign.
 ;
 ; On entry:
 ;
-; Uses W, FSR0
+; Uses W, FSR0, FSR1
 ;
 
 decDepthAbs:
 
-    addlw   .3              ; point to digit 0
-    movwf   FSR0L           ; point FSR to variable
+    movlw   high depth10
+    movwf   FSR0H
+    movlw   low depth10
+    movwf   FSR0L
 
-    movlw   .1
-    subwf   INDF0,F         ; subtract one from digit 0
-    btfsc   STATUS,C        ; borrow? (C will = 0)
-    return
+    movlw   high step10
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
 
-    movlw   .9
-    movwf   INDF0           ; wraps to 9 after 0
-    
-    decf    FSR0L,F         ; digit 1
-    movlw   .1
-    subwf   INDF0,F         ; subtract one from digit 1
-    btfsc   STATUS,C        ; borrow? (C will = 0)
-    return
+    movlw   .11             ; 11 digits in the operands
 
-    movlw   .9
-    movwf   INDF0           ; wraps to 9 after 0
-    
-    decf    FSR0L,F         ; digit 2
-    movlw   .1
-    subwf   INDF0,F         ; subtract one from digit 2
-    btfsc   STATUS,C        ; borrow? (C will = 0)
-    return
-
-    movlw   .9
-    movwf   INDF0           ; wraps to 9 after 0
-
-    decf    FSR0L,F         ; digit 3
-    movlw   .1
-    subwf   INDF0,F         ; subtract one from digit 3
-        
-    btfsc   STATUS,C        ; borrow? (C will = 0)
-    return
-
-    movlw   .9
-    movwf   INDF0           ; wraps to 9 after 0
-
-    ; if borrow from most significant digit, allow to roll over 
-    ; (should never happen, hardware can't travel that distance)
-
-    return
+    goto    subtractBCDVars
     
 ; end of decDepthAbs
 ;--------------------------------------------------------------------------------------------------
