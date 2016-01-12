@@ -549,11 +549,6 @@ BLINK_ON_FLAG			EQU		0x01
     pwmPolarity             ; polarity of the PWM output -- only lsb used
     pwmCheckSum             ; used to verify PWM values read from eeprom
 
-    ratio_neg2              ; negate ratio value (still needed?)
-    ratio_neg1              ; this may not work anymore as value is now BCD
-    ratio_neg0              ; see ratio2 for details
-                            ; debug mks -- remove this?
-
     debounce1               ; switch debounce timer decremented by the interrupt routine
     debounce0
 
@@ -2260,20 +2255,6 @@ skipDEMM7:
 	goto	LoopDEMM1
 
 exitDEMM7:
-
-	; store the negative of ratio1:ratio0 in ratio_neg1:ratio_neg0
-	; the negative number is used to catch match when pre-scaler goes negative
-
-    movf    step1,W
-    movwf   ratio_neg1
-    movf    step0,W
-    movwf   ratio_neg0
-
-    comf    ratio_neg0,F
-    comf    ratio_neg1,F
-    incf    ratio_neg0,F		; see note "incf vs decf rollover"
-    btfsc   STATUS,Z
-    incf    ratio_neg1,F
     
     return    
 
