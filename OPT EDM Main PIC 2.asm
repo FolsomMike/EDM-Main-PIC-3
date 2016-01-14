@@ -2313,16 +2313,16 @@ exitDEMM7:
 ;
 ; "OPT EDM Notch Cutter"
 ;
-; 0x1, 0xc2
+; 0x1, 0xc0
 ; "1 - Set Cut Depth" or "1 - Depth = "
 ;
-; 0x1, 0x96
+; 0x1, 0x94
 ; "2 - Cut Notch"
 ;
-; 0x1, 0xd6
+; 0x1, 0xd4
 ; "3 - Jog Electrode"
 ;
-; 0x1, 0xc2
+; 0x1, 0xc0
 ; Carriage Return (to place cursor on first option)
 ;
 ; It then processes user input.
@@ -2498,13 +2498,16 @@ skipDMM3:
 ;
 ; Screen displayed:
 ;
-; 0x1, 0xc2
+; 0x1, 0x80
 ; "4 - Cycle Test"
 ;
-; 0x1, 0x96
+; 0x1, 0xc0
 ; "5 - Motor Dir Normal" or "5 - Motor Dir Reverse"
 ;
-; 0x1, 0xc2
+; 0x1, 0x94
+; "6 - Erosion None" or "6 - Erosion 17%"
+;
+; 0x1, 0x80
 ; Carriage Return (to place cursor on first option)
 ;
 ; It then processes user input.
@@ -2524,7 +2527,7 @@ doMainMenuPage2:
     movlw   0x1
     movwf   menuOption      ; option 1 currently selected
 
-doMainMenuPage2A:			; call here if first option has already been set by caller
+doMainMenuPage2A:			; call here if selected option has already been set by caller
 
 ;print the strings of the menu
 
@@ -2544,7 +2547,7 @@ doMainMenuPage2A:			; call here if first option has already been set by caller
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
 
-    movlw   .20             ; "5 - Motor Dir " or "5 - Motor Dir "
+    movlw   .20             ; "5 - Motor Dir "
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2554,11 +2557,36 @@ doMainMenuPage2A:			; call here if first option has already been set by caller
     movlw   .22             ; add "Normal" suffix to motor dir line
     call    printString     ; print the string
 	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-	goto	placeCursorDMMP2
+	goto	option3DMMP2
 
 revDirDMMP2:
 
     movlw   .23             ; add "Reverse" suffix to motor dir line
+    call    printString     ; print the string
+	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+
+; display the third option
+
+option3DMMP2:
+
+    movlw   0x94
+    call    writeControl    ; position at line 3 column 1
+
+    movlw   .24             ; "5 - Erosion "
+    call    printString     ; print the string
+    call    waitLCD         ; wait until buffer printed
+
+    btfsc  	flags2,EROSION_MODE    ; check erosion mode
+	goto	useErosionDMMP2
+
+    movlw   .25             ; add "None" suffix to erosion line
+    call    printString     ; print the string
+	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+	goto	placeCursorDMMP2
+
+useErosionDMMP2:
+
+    movlw   .26             ; add "17%" suffix to erosion line
     call    printString     ; print the string
 	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
 
@@ -2577,8 +2605,11 @@ loopDMMP21:
 	bcf		menuOption,6
 
 ; scan for button inputs, highlight selected option, will return when Reset/Enter/Zero pressed
+; if handleMenuInputs returns with bit 7 or 6 of menuOptions set, the parsing will fall all the
+; way to the bottom where those bits are checked and handled. The bits could be checked at the
+; beginning instead?
 
-    movlw   .02                 ; maximum menu option number
+    movlw   .03                 ; maximum menu option number
     call    handleMenuInputs
 
 ; parse the selected option ---------------------------------------------------
@@ -2614,11 +2645,31 @@ skipDMMP23:
 	bsf		flags,MOTOR_DIR_MODE	; set motor direction to reverse
     call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
-    
+
 skipDMMP24:
 
-	btfss	menuOption,7
+    decfsz  scratch0,F
+    goto    skipDMMP26
+
+    ; handle option 6 - Erosion Change (menuOption value is 3)
+
+    btfss	flags2,EROSION_MODE     ; erosion factor is 17%?
 	goto	skipDMMP25
+
+	bcf		flags2,EROSION_MODE     ; set erosion factor to none
+	call    saveFlagsToEEprom       ; save the new setting to EEprom
+    goto    doMainMenuPage2         ; refresh menu
+
+skipDMMP25:
+
+	bsf		flags2,EROSION_MODE     ; set erosion mode to 17%
+    call    saveFlagsToEEprom       ; save the new setting to EEprom
+    goto    doMainMenuPage2         ; refresh menu
+
+skipDMMP26:
+
+	btfss	menuOption,7
+	goto	skipDMMP27
 
 	;go back to previous menu with last option defaulted	
     movlw   0xd4
@@ -2627,7 +2678,7 @@ skipDMMP24:
     movwf   menuOption      ; last option currently selected
 	goto	doMainMenuA		; display previous menu page
 
-skipDMMP25:
+skipDMMP27:
 
 	btfsc	menuOption,6
 	goto    loopDMMP21			; no next menu page, ignore
@@ -4075,6 +4126,11 @@ clearScreen:
 ; Handles menu inputs, moving the cursor to highlight the selected option. Returns when
 ; Reset/Enter/Zero button pressed.
 ;
+; If the user attempts to move above the first option, bit 7 of menuOption is set,
+; if the user attempts to move below the last option, bit 6 of menuOption is set.
+; The function exits in either of those cases to allow the calling function to change the menu
+; page as appropriate.
+;
 ; On entry:
 ;
 ; menuOption contains the number of the currently selected option.
@@ -4090,8 +4146,10 @@ handleMenuInputs:
 
 loopHMMI:
 
-	; check to see if bit 7 or 6 of menuOption has been set
-	; this flags that the menu page needs to be changed
+	; check to see if bit 7 or 6 of menuOption has been set by selectHigherOption or
+    ; selectLowerOption calls in the loop below
+	; this flags that the menu page needs to be changed so this function exits so the calling
+    ; function can perform that task
 
 	btfsc	menuOption,7
 	return
@@ -6769,7 +6827,68 @@ string23:   ; "Rev"
     retlw   'e'
     retlw   'v'
 
-string24:
+string24:   ; "6 - Erosion "
+
+    decfsz  scratch0,F      ; count down until desired string reached
+    goto    string25        ; skip to next string if count not 0
+
+    movlw   #.12
+    movwf   scratch1        ; scratch1 = length of string
+
+    movlw   0x0e            ; point to this program memory page
+    movwf   PCLATH
+    movf    scratch2,W      ; restore character selector
+    
+    addwf   PCL,F
+    retlw   '6'
+    retlw   ' '
+    retlw   '-'
+    retlw   ' '
+    retlw   'E'
+    retlw   'r'
+    retlw   'o'   
+    retlw   's'
+    retlw   'i'
+    retlw   'o'
+    retlw   'n'
+	retlw   ' '
+
+string25:   ; "None"
+
+    decfsz  scratch0,F      ; count down until desired string reached
+    goto    string26        ; skip to next string if count not 0
+
+    movlw   #.4
+    movwf   scratch1        ; scratch1 = length of string
+
+    movlw   0x0e            ; point to this program memory page
+    movwf   PCLATH
+    movf    scratch2,W      ; restore character selector
+    
+    addwf   PCL,F
+    retlw   'N'
+    retlw   'o'
+    retlw   'n'
+    retlw   'e'
+
+string26:   ; "17%"
+
+    decfsz  scratch0,F      ; count down until desired string reached
+    goto    string27        ; skip to next string if count not 0
+
+    movlw   #.3
+    movwf   scratch1        ; scratch1 = length of string
+
+    movlw   0x0e            ; point to this program memory page
+    movwf   PCLATH
+    movf    scratch2,W      ; restore character selector
+    
+    addwf   PCL,F
+    retlw   '1'
+    retlw   '7'
+    retlw   '%'
+
+string27:
     return                  ; no string here yet
 
 ; end of getStringChar
