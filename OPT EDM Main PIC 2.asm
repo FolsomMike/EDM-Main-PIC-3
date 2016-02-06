@@ -2156,9 +2156,9 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
-    movlw   high string0a   ; "OPT AutoNotcher x.x"
+    movlw   high string0   ; "OPT AutoNotcher x.x"
     movwf   FSR1H
-    movlw   low string0a
+    movlw   low string0
     movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
@@ -6111,33 +6111,33 @@ dF1Loop:
 ; Strings in Program Memory
 ;
     
-string0a    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','f',0x00
-string1a    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
-string2a    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
-string3a    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
-string4a    dw	'O','P','T',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
-string5a    dw	'1',' ','-',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
-string6a    dw	'1',' ','-',' ','D','e','p','t','h',' ','=',' ',0x00
-string7a    dw	'2',' ','-',' ','C','u','t',' ','N','o','t','c','h',0x00
-string8a    dw	'3',' ','-',' ','J','o','g',' ','E','l','e','c','t','r','o','d','e',0x00
-string9a    dw	' ',' ',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
-string10a   dw	'0','.','0','0','0',' ','i','n','c','h','e','s',0x00
-string11a   dw	'J','o','g',' ','M','o','d','e',0x00
-string12a   dw	'Z','e','r','o',' ','o','r',' ','E','x','i','t',0x00
-string13a   dw	'O','P','T',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
-string14a   dw	'T','u','r','n',' ','o','n',' ','C','u','t',' ','V','o','l','t','a','g','e',0x00
-string15a   dw	'U','p',' ',' ',' ','S','p','e','e','d','>',0x00
-string16a   dw	'D','o','w',   'n',' ',' ','S','t','o','p','>',0x00
-string17a   dw	'N','o','t',   'c','h',' ','M','o','d','e',0x00
-string18a   dw	'W','a','l',   'l',' ','M','o','d','e',0x00
-string19a   dw	'C','y','c','l','e',' ','T','e','s','t',0x00
-string20a   dw	'5',' ','-',' ','M','o','t','o','r',' ','D','i','r',' ',0x00
-string21a   dw	'4',' ','-',' ',0x00
-string22a   dw	'N','o','r','m','a','l',0x00
-string23a   dw	'R','e','v',0x00
-string24a   dw	'6',' ','-',' ','E','r','o','s','i','o','n',' ',0x00
-string25a   dw	'N','o','n','e',0x00
-string26a   dw	'1','7','%',0x00
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','f',0x00
+string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
+string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
+string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
+string4	    dw	'O','P','T',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
+string5	    dw	'1',' ','-',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
+string6	    dw	'1',' ','-',' ','D','e','p','t','h',' ','=',' ',0x00
+string7	    dw	'2',' ','-',' ','C','u','t',' ','N','o','t','c','h',0x00
+string8	    dw	'3',' ','-',' ','J','o','g',' ','E','l','e','c','t','r','o','d','e',0x00
+string9	    dw	' ',' ',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
+string10    dw	'0','.','0','0','0',' ','i','n','c','h','e','s',0x00
+string11    dw	'J','o','g',' ','M','o','d','e',0x00
+string12    dw	'Z','e','r','o',' ','o','r',' ','E','x','i','t',0x00
+string13    dw	'O','P','T',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
+string14    dw	'T','u','r','n',' ','o','n',' ','C','u','t',' ','V','o','l','t','a','g','e',0x00
+string15    dw	'U','p',' ',' ',' ','S','p','e','e','d','>',0x00
+string16    dw	'D','o','w',   'n',' ',' ','S','t','o','p','>',0x00
+string17    dw	'N','o','t',   'c','h',' ','M','o','d','e',0x00
+string18    dw	'W','a','l',   'l',' ','M','o','d','e',0x00
+string19    dw	'C','y','c','l','e',' ','T','e','s','t',0x00
+string20    dw	'5',' ','-',' ','M','o','t','o','r',' ','D','i','r',' ',0x00
+string21    dw	'4',' ','-',' ',0x00
+string22    dw	'N','o','r','m','a','l',0x00
+string23    dw	'R','e','v',0x00
+string24    dw	'6',' ','-',' ','E','r','o','s','i','o','n',' ',0x00
+string25    dw	'N','o','n','e',0x00
+string26    dw	'1','7','%',0x00
 
 ; end of Strings in Program Memory
 ;--------------------------------------------------------------------------------------------------
