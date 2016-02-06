@@ -232,7 +232,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-;#define debug 1     ; set debug testing "on"
+#define debug 1     ; set debug testing "on" ;//DEBUG HSS -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -824,18 +824,15 @@ BLINK_ON_FLAG			EQU		0x01
 	nop			            ; put at address 0x0004.
 
 
-;wip -- PIC16f1459 now saves important registers automatically on interrupt
-; keep PUSH and POP macros for possible future use -- just empty them for now
+
 
 ; interrupt vector at 0x0004
-; NOTE: You must save values (PUSH_MACRO) and clear PCLATH before jumping to the interrupt
-; routine - if PCLATH has bits set it will cause a jump into an unexpected program memory
+; NOTE: if PCLATH has bits set it will cause a jump into an unexpected program memory
 ; bank.
 
-	PUSH_MACRO              ; MACRO that saves required context registers
-	clrf	STATUS          ; set to known state
+    clrf    STATUS          ; set to known state
     clrf    PCLATH          ; set to bank 0 where the ISR is located
-    goto 	handleInterrupt	; points to interrupt service routine
+    goto    handleInterrupt ; points to interrupt service routine
 
 ; end of Reset Vectors
 ;--------------------------------------------------------------------------------------------------
@@ -896,6 +893,8 @@ start:
     call    debugFunc1 ; debug mks -- remove this
 
     call    setup           ; preset variables and configure hardware
+    
+    goto doExtModeMenuA ;//DEBUG HSS
 
 menuLoop:
 
@@ -1835,8 +1834,6 @@ INT_ERROR_LP1:		        		; NO, do error recovery
 
 endISR:
 
-	POP_MACRO               	; MACRO that restores required registers
-
 	retfie                  	; Return and enable interrupts
 
 ; end of handleInterrupt
@@ -2155,7 +2152,10 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
-    movlw   .0              ; "OPT AutoNotcher x.x"
+    movlw   high string0a   ; "OPT AutoNotcher x.x"
+    movwf   FSR1H
+    movlw   low string0a
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -5126,7 +5126,7 @@ isDepthZero:
 ;--------------------------------------------------------------------------------------------------
 ; printString
 ;
-; Prints the string specified by W.  The string is placed after any data already in the print
+; Prints the string pointed to by FSR1.  The string is placed after any data already in the print
 ; buffer, all data in the buffer is then begun to be transmitted to the LCD.
 ;
 ; Does not wait for the data to be printed - call waitLCD after calling this function to wait
@@ -5134,10 +5134,7 @@ isDepthZero:
 ;
 ; On entry:
 ;
-; W contains index of desired character - first character is W = 0
-;
-; Uses W, PCLATH, TMR0, OPTION_REG,
-;   scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6
+; FSR1 points to the desired string
 ;
 ; After placing the string characters in the LCD print buffer, the buffer is flushed to force
 ; transmission of the buffer.  Any characters placed in the buffer before the string will also
@@ -5147,42 +5144,16 @@ isDepthZero:
 
 printString:
 
-    movwf   scratch6        ; store string index
-
-    ; call to get first character just so we can get the length of the string
-
-    movwf   scratch0        ; store string index
-    movlw   #.0             ; number of character to retrieve (first = 0)   
-    bsf     PCLATH,3
-    call    getStringChar   ; retrieve character from string
-    bcf     PCLATH,3
-
-    movf    scratch1,W
-    movwf   scratch4        ; scratch4 = string length
-    clrf    scratch5        ; zero character index
-
 loopPS:
     
-    movf    scratch6,W
-    movwf   scratch0        ; scratch0 = string index
-    movf    scratch5,W      ; W = character index
-  
-    bsf     PCLATH,3  
-    call    getStringChar   ; get next character
-    bcf     PCLATH,3
+    moviw   FSR1++
 
-    call    writeChar       ; write the character to the LCD
-
-    incf    scratch5,F      ; move to next character
-    movf    scratch4,W      ; get the string length
-    subwf   scratch5,W      ; check if index at end of string
-
-    btfss   STATUS,Z
-    goto    loopPS          ; loop until length of string reached
-
-endPS:
-
+    btfsc   STATUS,Z
     goto    flushLCD        ; force printing of the buffer    
+    
+    call    writeChar       ; write the character to the LCD print buffer
+    
+    goto    loopPS          ; loop until length of string reached 
 
 ; end of printString
 ;--------------------------------------------------------------------------------------------------
@@ -6118,7 +6089,6 @@ dF1Loop:
     ; stuff a value into the PWM variables
 
     movlw   0xff
-    movwf   pwmDutyCycleHiByte
     movwf   pwmDutyCycleLoByte
     movwf   pwmPeriod
     movwf   pwmPolarity
@@ -6130,36 +6100,21 @@ dF1Loop:
 
 ; end of debugFunc1
 ;--------------------------------------------------------------------------------------------------
-
+    
+    ;//DEBUG HSSorg     0x800           ; code on page 2 of 2047 byte boundary for goto and call opcodes
+    
+    
+    org     0xb00           ; start on this boundary
+    
 ;--------------------------------------------------------------------------------------------------
-; getStringChar
+; Strings in Program Memory
 ;
-; All the strings are stored here - the function returns one character from one string.
-;
-; On entry:
-;
-; Data Bank 0 should already be selected.
-; scratch0 contains index of desired string - first string is scratch0 = 0
-; W contains index of desired character - first character is W = 0
-;
-; On return W contains the character.
-; scratch1 contains the length of the string
-; Data Bank 0 will still be selected.
-;
-; CAUTION: No string can cross over the PCL boundary (256 bytes) - when adding a new string, use
-; org to reposition it if it will cross the boundary.  PCLATH MUST be adjusted for each string
-; to point to its bank location in memory:
-;
-;    movlw   0x0c            ; make sure this points to the page the string is on!!!!
-;    movwf   PCLATH
-;
-; CAUTION: If a string is inserted, all following strings must be checked to make sure they
-; are not shifted to span a PCL boundary (every 256 bytes) - use ORG to prevent this.  Every
-; value loaded into PCLATH must be checked. Use View/Disassembly to see the address positions.
-;
-; Uses W, PCLATH, scratch0, scratch1, scratch2
-;
+    
+string0a    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','f',0x00
 
+; end of Strings in Program Memory
+;--------------------------------------------------------------------------------------------------
+    
     org     0xc00           ; start on this boundary
 
 getStringChar:
