@@ -2163,7 +2163,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
-    movlw   0xc0
+    movlw   0xc0	    ; set position for writeControl to line 2, column 1
     call    writeControl    ; position at line 2 column 1
     movlw   .1              ; "CHOOSE CONFIGURATION"
     call    printString     ; print the string
