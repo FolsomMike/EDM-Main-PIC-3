@@ -2165,19 +2165,28 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
     movlw   0xc0	    ; set position for writeControl to line 2, column 1
     call    writeControl    ; position at line 2 column 1
-    movlw   .1              ; "CHOOSE CONFIGURATION"
+    movlw   high string1    ; "CHOOSE CONFIGURATION"
+    movwf   FSR1H
+    movlw   low string1
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
-    movlw   .2              ; "1 - EDM Notch Cutter"
+    movlw   high string2    ; "1 - EDM Notch Cutter"
+    movwf   FSR1H
+    movlw   low string2
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
-    movlw   .3              ; "2 - EDM Extend Reach"
+    movlw   high string3    ; "2 - EDM Extend Reach"
+    movwf   FSR1H
+    movlw   low string3
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2357,7 +2366,10 @@ doMainMenuA:				; call here if default option has already been set by caller
 
 ; display the menu header for standard mode
 
-    movlw   .4              ; "OPT EDM Notch Cutter"
+    movlw   high string4   ; "OPT EDM Notch Cutter"
+    movwf   FSR1H
+    movlw   low string4
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     goto    skipDMM    
@@ -2366,7 +2378,10 @@ extendedModeDMM:
 
 ; display the menu header for extended mode
 
-    movlw   .13             ; "OPT EDM Extend Reach"
+    movlw   high string13   ; "OPT EDM Extend Reach"
+    movwf   FSR1H
+    movlw   low string13
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2382,7 +2397,10 @@ skipDMM:
     btfss   STATUS,Z
     goto    skipString5     ; if not zero, jump to display the depth
 
-    movlw   .5              ; "1 - Set Cut Depth"
+    movlw   high string5  ; "1 - Set Cut Depth"
+    movwf   FSR1H
+    movlw   low string5
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
@@ -2392,7 +2410,10 @@ skipDMM:
 
 skipString5:
 
-    movlw   .6              ; "1 - Depth = "
+    movlw   high string6    ; "1 - Depth = "
+    movwf   FSR1H
+    movlw   low string6
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
@@ -2404,14 +2425,20 @@ skipString6:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .7              ; "2 - Cut Notch"
+    movlw   high string7    ; "2 - Cut Notch"
+    movwf   FSR1H
+    movlw   low string7
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
 
-    movlw   .8              ; "3 - Jog Electrode"
+    movlw   high string8    ; "3 - Jog Electrode"
+    movwf   FSR1H
+    movlw   low string8
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
@@ -2539,10 +2566,17 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
 
 ; display the first option
 
-    movlw   .21             ; "4 - " prefix so can re-use "Cycle Test" string
+    movlw   high string21   ; "4 - " prefix so can re-use "Cycle Test" string
+    movwf   FSR1H
+    movlw   low string21
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-    movlw   .19             ; "Cycle Test"
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    
+    movlw   high string19   ; "Cycle Test"
+    movwf   FSR1H
+    movlw   low string19
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2551,23 +2585,32 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
 
-    movlw   .20             ; "5 - Motor Dir "
+    movlw   high string20   ; "5 - Motor Dir "
+    movwf   FSR1H
+    movlw   low string20
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     btfsc  	flags,MOTOR_DIR_MODE    ; check for reverse motor direction
 	goto	revDirDMMP2
 
-    movlw   .22             ; add "Normal" suffix to motor dir line
+    movlw   high string22   ; add "Normal" suffix to motor dir line
+    movwf   FSR1H
+    movlw   low string22
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-	goto	option3DMMP2
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    goto    option3DMMP2
 
 revDirDMMP2:
 
-    movlw   .23             ; add "Reverse" suffix to motor dir line
+    movlw   high string23   ; add "Reverse" suffix to motor dir line
+    movwf   FSR1H
+    movlw   low string23
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
 
 ; display the third option
 
@@ -2576,23 +2619,32 @@ option3DMMP2:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .24             ; "5 - Erosion "
+    movlw   high string24   ; "6 - Erosion "
+    movwf   FSR1H
+    movlw   low string24
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     btfsc  	flags2,EROSION_MODE    ; check erosion mode
 	goto	useErosionDMMP2
 
-    movlw   .25             ; add "None" suffix to erosion line
+    movlw   high string25   ; add "None" suffix to erosion line
+    movwf   FSR1H
+    movlw   low string25
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-	goto	placeCursorDMMP2
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    goto    placeCursorDMMP2
 
 useErosionDMMP2:
 
-    movlw   .26             ; add "17%" suffix to erosion line
+    movlw   high string26   ; add "17%" suffix to erosion line
+    movwf   FSR1H
+    movlw   low string26
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
 
 placeCursorDMMP2:
 
@@ -2735,11 +2787,14 @@ cutNotch:
     
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .14             ; "Turn on Cut Voltage"
+    movlw   high string14   ; "Turn on Cut Voltage"
+    movwf   FSR1H
+    movlw   low string14
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
-	call	setupCutNotchAndCycleTest	; finish the screen setup
+    call    setupCutNotchAndCycleTest	; finish the screen setup
 
     bcf     flags,AT_DEPTH  ; clear the depth reached flag
     bsf     flags,UPDATE_DISPLAY ; force display update first time through
@@ -2967,8 +3022,11 @@ setupCutNotchAndCycleTest:
     movlw   0xc1
     call    writeControl    ; position at line 2 column 2
 
-    movlw   .15
-    call    printString     ; "Up   Speed>"
+    movlw   high string15   ; "Up Speed>"
+    movwf   FSR1H
+    movlw   low string15
+    movwf   FSR1L
+    call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     call    displaySpeedAndPower    ; display the current advance speed and power level
@@ -2977,8 +3035,11 @@ setupCutNotchAndCycleTest:
     movlw   0x95
     call    writeControl    ; position at line 3 column 2
 
-    movlw   .16
-    call    printString     ; "Down  Stop>"
+    movlw   high string16   ; "Down  Stop>"
+    movwf   FSR1H
+    movlw   low string16
+    movwf   FSR1L
+    call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     call    displayTarget   ; display the target depth to cut
@@ -3035,7 +3096,10 @@ cycleTest:
     
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .19             ; "Cycle Test"
+    movlw   high string19   ; "Cycle Test"
+    movwf   FSR1H
+    movlw   low string19
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
@@ -3635,22 +3699,33 @@ setDepth:
 
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .9              ; "Set Cut Depth"
+    movlw   high string9   ; "   Set Cut Depth"
+    movwf   FSR1H
+    movlw   low string9
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
-    movlw   .10             ; "0.000 inches"
+    movlw   high string10   ; "0.000 inches"
+    movwf   FSR1H
+    movlw   low string10
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
-
-    movlw   .17             ; print "Notch Mode" if in notch mode
+ 
+    movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
+    movwf   FSR1H
+    
+    movlw   low string17    ; print "Notch Mode" if in notch mode
     btfsc   flags,WALL_MODE ; which mode?
-    movlw   .18             ; print "Wall Mode" if in wall mode
+    movlw   low string18    ; print "Wall Mode" if in wall mode
+    
+    movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
@@ -3725,9 +3800,15 @@ setCutMode:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .17             ; print "Notch Mode" if in notch mode
+    
+    movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
+    movwf   FSR1H
+    
+    movlw   low string17    ; print "Notch Mode" if in notch mode
     btfsc   flags,WALL_MODE ; which mode?
-    movlw   .18             ; print "Wall Mode" if in wall mode
+    movlw   low string18    ; print "Wall Mode" if in wall mode
+    
+    movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
@@ -3897,13 +3978,19 @@ jogMode:
 
     movlw   0x86
     call    writeControl    ; position at line 1 column 6
-    movlw   .11             ; "Jog Mode"
+    movlw   high string11   ; "Jog Mode"
+    movwf   FSR1H
+    movlw   low string11
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
-    movlw   .12             ; "Zero or Exit"
+    movlw   high string12   ; "Zero or Exit"
+    movwf   FSR1H
+    movlw   low string12
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
