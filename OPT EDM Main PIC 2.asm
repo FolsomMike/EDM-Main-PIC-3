@@ -232,7 +232,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-;#define debug 1     ; set debug testing "on"
+#define debug 1     ; set debug testing "on" ;//DEBUG HSS -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -752,6 +752,10 @@ BLINK_ON_FLAG			EQU		0x01
     step2                  
     step1
     step0                  ; least significant digit
+    
+    scratchc0               ; scratches defined in bank c(2) so that we don't have to switch
+    scratchc1               ; banks all the time
+    scratchc2
 
  endc
 
@@ -789,10 +793,10 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock 	0x0      	; Variables start in RAM at 0x0
 	
-	eeDepth3                ; storage for depth value
-    eeDepth2
-    eeDepth1
-    eeDepth0
+	eeTarget3           ; storage for target depth value
+    eeTarget2
+    eeTarget1
+    eeTarget0
 
     eeFlags
     eeFlags2
@@ -824,18 +828,15 @@ BLINK_ON_FLAG			EQU		0x01
 	nop			            ; put at address 0x0004.
 
 
-;wip -- PIC16f1459 now saves important registers automatically on interrupt
-; keep PUSH and POP macros for possible future use -- just empty them for now
+
 
 ; interrupt vector at 0x0004
-; NOTE: You must save values (PUSH_MACRO) and clear PCLATH before jumping to the interrupt
-; routine - if PCLATH has bits set it will cause a jump into an unexpected program memory
+; NOTE: if PCLATH has bits set it will cause a jump into an unexpected program memory
 ; bank.
 
-	PUSH_MACRO              ; MACRO that saves required context registers
-	clrf	STATUS          ; set to known state
+    clrf    STATUS          ; set to known state
     clrf    PCLATH          ; set to bank 0 where the ISR is located
-    goto 	handleInterrupt	; points to interrupt service routine
+    goto    handleInterrupt ; points to interrupt service routine
 
 ; end of Reset Vectors
 ;--------------------------------------------------------------------------------------------------
@@ -894,6 +895,8 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
 start:
 
     call    setup           ; preset variables and configure hardware
+    
+    goto    debugHSS
 
 menuLoop:
 
@@ -984,7 +987,7 @@ setup:
     movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
     movwf   sparkLevel          ; save the selected value
 
-    call    readDepthValueFromEEprom    ; read the value stored for depth from the EEProm
+    call    readTargetValueFromEEprom    ; read the value stored for depth from the EEProm
 
     call    readPWMValsFrmEEpromSendLEDPIC
 
@@ -1461,23 +1464,25 @@ setLowCurrentLimitDigitalPot:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; readDepthValueFromEEprom
+; readTargetValueFromEEprom
 ;
-; Reads the user set cut depth value from eeprom. These are unpacked BCD digits.
+; Reads the user set target depth value from eeprom. These are unpacked BCD digits.
 ;
-; Each digit is checked for valid range of 0-9 and force to that range.
+; Each digit is checked for valid range of 0-9 and forced to that range.
 ;
 ; Note: these variables must be kept contiguous in memory and eeprom.
 ;
 
-readDepthValueFromEEprom:
+readTargetValueFromEEprom:
 
-    banksel depth3
+    banksel target9
 
-    movlw   depth3          ; address in RAM
+    movlw   high target9
+    movwf   FSR0H
+    movlw   low target9      ; address in RAM
     movwf   FSR0L
     clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
+    movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; read 4 bytes
@@ -1485,33 +1490,33 @@ readDepthValueFromEEprom:
 
     ; check each digit for illegal BCD value (0-9)
 
-    movf    depth3,W
-    movwf   scratch0
+debugHSS:                           ;//DEBUG HSS// -- remove later
+    
+    banksel target9                 ;//DEBUG HSS// -- remove later
+    
+    movf    target9,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth3
+    movwf   target9
 
-    movf    depth2,W
-    movwf   scratch0
+    movf    target8,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth2
+    movwf   target8
 
-    movf    depth1,W
-    movwf   scratch0
+    movf    target7,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth1
+    movwf   target7
 
-    movf    depth0,W
-    movwf   scratch0
+    movf    target6,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth0
+    movwf   target6
 
     return
 
-; end of readDepthValueFromEEprom
+; end of readTargetValueFromEEprom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1524,12 +1529,12 @@ readDepthValueFromEEprom:
 
 saveDepthValueToEEprom:
 
-    banksel depth3
+    banksel eeTarget3
 
-    movlw   depth3          ; address in RAM
+    movlw   target9          ; address in RAM
     movwf   FSR0L
     clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
+    movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; write 4 bytes
@@ -1565,23 +1570,26 @@ readSparkLevelsFromEEprom:
 
     banksel scratch0
 
+    movlw   high scratch0               ; point FSR0 at the high limit
+    movwf   FSR1H
+    movlw   low scratch0
+    movwf   FSR1L
+
+    movlw   0x81                        ; upper limit
+    movwf   scratch0
     movlw   0x01                        ; lower limit
     movwf   scratch1
-    movlw   0x81                        ; upper limit
-    movwf   scratch2
 
     movf    sparkLevelNotch,W           ; limit notch spark level value
-    movwf   scratch0
+    movwf   scratch2
     call    applyLimitsToByteValue
-    movf    scratch0,W                  ; update variable with clipped value
-    movwf   sparkLevelNotch
+    movwf   sparkLevelNotch             ; update variable with clipped value
 
     movf    sparkLevelWall,W            ; limit wall spark level value
-    movwf   scratch0
+    movwf   scratch2
     call    applyLimitsToByteValue
-    movf    scratch0,W                  ; update variable with clipped value
-    movwf   sparkLevelWall
-
+    movwf   sparkLevelWall              ; update variable with clipped value
+    
     return
 
 ; end of readSparkLevelsFromEEprom
@@ -1832,8 +1840,6 @@ INT_ERROR_LP1:		        		; NO, do error recovery
                                		; but there were no expected interrupts
 
 endISR:
-
-	POP_MACRO               	; MACRO that restores required registers
 
 	retfie                  	; Return and enable interrupts
 
@@ -2153,25 +2159,37 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
-    movlw   .0              ; "OPT AutoNotcher x.x"
+    movlw   high string0   ; "OPT AutoNotcher x.x"
+    movwf   FSR1H
+    movlw   low string0
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
-    movlw   0xc0
+    movlw   0xc0	    ; set position for writeControl to line 2, column 1
     call    writeControl    ; position at line 2 column 1
-    movlw   .1              ; "CHOOSE CONFIGURATION"
+    movlw   high string1    ; "CHOOSE CONFIGURATION"
+    movwf   FSR1H
+    movlw   low string1
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
-    movlw   .2              ; "1 - EDM Notch Cutter"
+    movlw   high string2    ; "1 - EDM Notch Cutter"
+    movwf   FSR1H
+    movlw   low string2
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
-    movlw   .3              ; "2 - EDM Extend Reach"
+    movlw   high string3    ; "2 - EDM Extend Reach"
+    movwf   FSR1H
+    movlw   low string3
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2179,15 +2197,15 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     
     movf    cursorPos,W		; load the cursor position to highlight the current choice
     call    writeControl    ; write line 3 column 1
-	call	turnOnBlink
+    call    turnOnBlink
     call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
 
 ; scan for button inputs, highlight selected option, will return when Reset/Enter/Zero pressed
 
 LoopDEMM1:
 
-	bcf		menuOption,7		; clear the menu page change flags
-	bcf		menuOption,6
+    bcf		menuOption,7		; clear the menu page change flags
+    bcf		menuOption,6
 
     movlw   .02                 ; maximum menu option number
     call    handleMenuInputs
@@ -2203,7 +2221,7 @@ LoopDEMM1:
     ; handle option 1 - non-extended reach cutting head installed
 
     bcf     flags,EXTENDED_MODE ; set flag to 0
-
+    
     ; copy value for the standard tool to the inches/motor step variable
 
     movlw   high step10         ; destination variable
@@ -2292,6 +2310,8 @@ skipDEMM7:
 
 exitDEMM7:
     
+    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
+    
     return    
 
 ; end of doExtModeMenu
@@ -2351,7 +2371,10 @@ doMainMenuA:				; call here if default option has already been set by caller
 
 ; display the menu header for standard mode
 
-    movlw   .4              ; "OPT EDM Notch Cutter"
+    movlw   high string4   ; "OPT EDM Notch Cutter"
+    movwf   FSR1H
+    movlw   low string4
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     goto    skipDMM    
@@ -2360,7 +2383,10 @@ extendedModeDMM:
 
 ; display the menu header for extended mode
 
-    movlw   .13             ; "OPT EDM Extend Reach"
+    movlw   high string13   ; "OPT EDM Extend Reach"
+    movwf   FSR1H
+    movlw   low string13
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2376,7 +2402,10 @@ skipDMM:
     btfss   STATUS,Z
     goto    skipString5     ; if not zero, jump to display the target
 
-    movlw   .5              ; "1 - Set Cut Depth"
+    movlw   high string5  ; "1 - Set Cut Depth"
+    movwf   FSR1H
+    movlw   low string5
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
@@ -2386,7 +2415,10 @@ skipDMM:
 
 skipString5:
 
-    movlw   .6              ; "1 - Depth = "
+    movlw   high string6    ; "1 - Depth = "
+    movwf   FSR1H
+    movlw   low string6
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
@@ -2398,14 +2430,20 @@ skipString6:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .7              ; "2 - Cut Notch"
+    movlw   high string7    ; "2 - Cut Notch"
+    movwf   FSR1H
+    movlw   low string7
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
 
-    movlw   .8              ; "3 - Jog Electrode"
+    movlw   high string8    ; "3 - Jog Electrode"
+    movwf   FSR1H
+    movlw   low string8
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
@@ -2533,10 +2571,17 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
 
 ; display the first option
 
-    movlw   .21             ; "4 - " prefix so can re-use "Cycle Test" string
+    movlw   high string21   ; "4 - " prefix so can re-use "Cycle Test" string
+    movwf   FSR1H
+    movlw   low string21
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-    movlw   .19             ; "Cycle Test"
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    
+    movlw   high string19   ; "Cycle Test"
+    movwf   FSR1H
+    movlw   low string19
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -2545,23 +2590,32 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
 
-    movlw   .20             ; "5 - Motor Dir "
+    movlw   high string20   ; "5 - Motor Dir "
+    movwf   FSR1H
+    movlw   low string20
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     btfsc  	flags,MOTOR_DIR_MODE    ; check for reverse motor direction
 	goto	revDirDMMP2
 
-    movlw   .22             ; add "Normal" suffix to motor dir line
+    movlw   high string22   ; add "Normal" suffix to motor dir line
+    movwf   FSR1H
+    movlw   low string22
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-	goto	option3DMMP2
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    goto    option3DMMP2
 
 revDirDMMP2:
 
-    movlw   .23             ; add "Reverse" suffix to motor dir line
+    movlw   high string23   ; add "Reverse" suffix to motor dir line
+    movwf   FSR1H
+    movlw   low string23
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
 
 ; display the third option
 
@@ -2570,23 +2624,32 @@ option3DMMP2:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .24             ; "5 - Erosion "
+    movlw   high string24   ; "6 - Erosion "
+    movwf   FSR1H
+    movlw   low string24
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     btfsc  	flags2,EROSION_MODE    ; check erosion mode
 	goto	useErosionDMMP2
 
-    movlw   .25             ; add "None" suffix to erosion line
+    movlw   high string25   ; add "None" suffix to erosion line
+    movwf   FSR1H
+    movlw   low string25
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
-	goto	placeCursorDMMP2
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    goto    placeCursorDMMP2
 
 useErosionDMMP2:
 
-    movlw   .26             ; add "17%" suffix to erosion line
+    movlw   high string26   ; add "17%" suffix to erosion line
+    movwf   FSR1H
+    movlw   low string26
+    movwf   FSR1L
     call    printString     ; print the string
-	call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
 
 placeCursorDMMP2:
 
@@ -2729,11 +2792,14 @@ cutNotch:
     
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .14             ; "Turn on Cut Voltage"
+    movlw   high string14   ; "Turn on Cut Voltage"
+    movwf   FSR1H
+    movlw   low string14
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
-	call	setupCutNotchAndCycleTest	; finish the screen setup
+    call    setupCutNotchAndCycleTest	; finish the screen setup
 
     bcf     flags,AT_DEPTH  ; clear the depth reached flag
     bsf     flags,UPDATE_DISPLAY ; force display update first time through
@@ -2961,8 +3027,11 @@ setupCutNotchAndCycleTest:
     movlw   0xc1
     call    writeControl    ; position at line 2 column 2
 
-    movlw   .15
-    call    printString     ; "Up   Speed>"
+    movlw   high string15   ; "Up Speed>"
+    movwf   FSR1H
+    movlw   low string15
+    movwf   FSR1L
+    call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     call    displaySpeedAndPower    ; display the current advance speed and power level
@@ -2971,8 +3040,11 @@ setupCutNotchAndCycleTest:
     movlw   0x95
     call    writeControl    ; position at line 3 column 2
 
-    movlw   .16
-    call    printString     ; "Down  Stop>"
+    movlw   high string16   ; "Down  Stop>"
+    movwf   FSR1H
+    movlw   low string16
+    movwf   FSR1L
+    call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
     call    displayTarget   ; display the target depth to cut
@@ -3029,7 +3101,10 @@ cycleTest:
     
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .19             ; "Cycle Test"
+    movlw   high string19   ; "Cycle Test"
+    movwf   FSR1H
+    movlw   low string19
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed    
 
@@ -3633,22 +3708,33 @@ setDepth:
 
     call    clearScreen     ; clear the LCD screen
 
-    movlw   .9              ; "Set Cut Depth"
+    movlw   high string9   ; "   Set Cut Depth"
+    movwf   FSR1H
+    movlw   low string9
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
-    movlw   .10             ; "0.000 inches"
+    movlw   high string10   ; "0.000 inches"
+    movwf   FSR1H
+    movlw   low string10
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
-
-    movlw   .17             ; print "Notch Mode" if in notch mode
+ 
+    movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
+    movwf   FSR1H
+    
+    movlw   low string17    ; print "Notch Mode" if in notch mode
     btfsc   flags,WALL_MODE ; which mode?
-    movlw   .18             ; print "Wall Mode" if in wall mode
+    movlw   low string18    ; print "Wall Mode" if in wall mode
+    
+    movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
@@ -3728,9 +3814,15 @@ setCutMode:
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
 
-    movlw   .17             ; print "Notch Mode" if in notch mode
+    
+    movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
+    movwf   FSR1H
+    
+    movlw   low string17    ; print "Notch Mode" if in notch mode
     btfsc   flags,WALL_MODE ; which mode?
-    movlw   .18             ; print "Wall Mode" if in wall mode
+    movlw   low string18    ; print "Wall Mode" if in wall mode
+    
+    movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
@@ -3894,13 +3986,19 @@ jogMode:
 
     movlw   0x86
     call    writeControl    ; position at line 1 column 6
-    movlw   .11             ; "Jog Mode"
+    movlw   high string11   ; "Jog Mode"
+    movwf   FSR1H
+    movlw   low string11
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
-    movlw   .12             ; "Zero or Exit"
+    movlw   high string12   ; "Zero or Exit"
+    movwf   FSR1H
+    movlw   low string12
+    movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
 
@@ -5141,7 +5239,7 @@ isZero:
 ;--------------------------------------------------------------------------------------------------
 ; printString
 ;
-; Prints the string specified by W.  The string is placed after any data already in the print
+; Prints the string pointed to by FSR1.  The string is placed after any data already in the print
 ; buffer, all data in the buffer is then begun to be transmitted to the LCD.
 ;
 ; Does not wait for the data to be printed - call waitLCD after calling this function to wait
@@ -5149,10 +5247,7 @@ isZero:
 ;
 ; On entry:
 ;
-; W contains index of desired character - first character is W = 0
-;
-; Uses W, PCLATH, TMR0, OPTION_REG,
-;   scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6
+; FSR1 points to the desired string
 ;
 ; After placing the string characters in the LCD print buffer, the buffer is flushed to force
 ; transmission of the buffer.  Any characters placed in the buffer before the string will also
@@ -5162,42 +5257,16 @@ isZero:
 
 printString:
 
-    movwf   scratch6        ; store string index
-
-    ; call to get first character just so we can get the length of the string
-
-    movwf   scratch0        ; store string index
-    movlw   #.0             ; number of character to retrieve (first = 0)   
-    bsf     PCLATH,3
-    call    getStringChar   ; retrieve character from string
-    bcf     PCLATH,3
-
-    movf    scratch1,W
-    movwf   scratch4        ; scratch4 = string length
-    clrf    scratch5        ; zero character index
-
 loopPS:
     
-    movf    scratch6,W
-    movwf   scratch0        ; scratch0 = string index
-    movf    scratch5,W      ; W = character index
-  
-    bsf     PCLATH,3  
-    call    getStringChar   ; get next character
-    bcf     PCLATH,3
+    moviw   FSR1++
 
-    call    writeChar       ; write the character to the LCD
-
-    incf    scratch5,F      ; move to next character
-    movf    scratch4,W      ; get the string length
-    subwf   scratch5,W      ; check if index at end of string
-
-    btfss   STATUS,Z
-    goto    loopPS          ; loop until length of string reached
-
-endPS:
-
+    btfsc   STATUS,Z
     goto    flushLCD        ; force printing of the buffer    
+    
+    call    writeChar       ; write the character to the LCD print buffer
+    
+    goto    loopPS          ; loop until length of string reached 
 
 ; end of printString
 ;--------------------------------------------------------------------------------------------------
@@ -5964,22 +6033,33 @@ applyASCIINumDigitLimits:
 ;--------------------------------------------------------------------------------------------------
 ; applyBCDDigitLimits
 ;
-; Limits an unpacked BCD value in scratch0 between 0 and 9.
+; Limits an unpacked BCD value in scratchc2 between 0 and 9.
 ;
-; Compares the value in scratch0 with 0 and 9. If the value is less than that for
-; the 0, it is replaced with that value. If greater than 9, it is replaced
-; with that value.
+; Compares the value in scratchc2 with 0 and 9. If the value is less than that for the 0, it is 
+; replaced with that value. If greater than 9, it is replaced with that value.
+;
+; ON ENTRY:
+    
+;   scratchc2 = original value to check
+;
+; ON EXIT:
+;
+;   If 0 < value < 9        W = original value      [FSR1+2]
+;   If value < 0            W = low limit           [FSR1+1]
+;   If value > 9            W = high limit          [FSR1]
 ;
 
 applyBCDDigitLimits:
 
-    banksel scratch0
+    movlw   high scratchc0               ; point FSR0 at the high limit
+    movwf   FSR1H
+    movlw   low scratchc0
+    movwf   FSR1L
 
-    movlw   .0                           ; lower limit for unpacked BCD
-    movwf   scratch1
-
-    movlw   .9                           ; upper limit for unpacked BCD
-    movwf   scratch2
+    movlw   .9                          ; upper limit for unpacked BCD
+    movwf   scratchc0
+    movlw   .0                          ; lower limit for unpacked BCD
+    movwf   scratchc1
 
     goto    applyLimitsToByteValue
 
@@ -5991,36 +6071,48 @@ applyBCDDigitLimits:
 ;
 ; Clips a value between a lower and upper limit.
 ;
-; Compares the value in scratch0 with the lower limit in scratch1 and the upper limit in scratch2.
+; Compares the value in [FSR1+2] with the limits pointed to by FSR1. FSR1 points to the high limit
+; value, the low limit should be in [FSR1+1].
 ;
-; If scratch0 < scratch1, scratch0 = scratch1
-; If scratch0 > scratch2, scratch0 = scratch2
+; ON ENTRY:
+;
+;   [FSR1]      =   high limit
+;   [FSR1+1]    =   low limit
+;   [FSR1+2]    =   original value to check against limits
+;
+; ON EXIT:
+;
+;   If low limit < value < high limit     W = original value      [FSR1+2]
+;   If value < low limit                  W = low limit           [FSR1+1]
+;   If value > high limit,                W = high limit          [FSR1]
 ;
 
 applyLimitsToByteValue:
-
-    banksel scratch0
-
-    movf    scratch0,W          ; check if scratch0 greater than scratch2
-    subwf   scratch2,W
-    btfsc   STATUS,C
+   
+    moviw   2[FSR1]             ; load value into W
+    subwf   INDF1,W             ; check if value greater than high limit
+    moviw   2[FSR1]             ; load value into W
+    btfsc   STATUS,C            ; skip next line if value greater than high limit
     goto    notHigher
 
-    movf    scratch2,W          ; was greater than so replace scratch0 with scratch1
-    movwf   scratch0
+    movf    INDF1,W             ; was greater than so replace W with the high limit
+    
+    return
 
 notHigher:
 
-    movf    scratch1,W          ; check if scratch0 less than scratch1
-    subwf   scratch0,W
-    btfsc   STATUS,C
+    incf    FSR1,F              ; FSR1 will now point to the low limit
+    subwf   INDF1,W             ; check if value less than or equal to low limit
+    moviw   1[FSR1]             ; load value into W
+    btfss   STATUS,C            ; skip next line if value lower than or equal to low limit
     goto    notLower
-
-    movf    scratch1,W          ; was less than so replace scratch0 with scratch1
-    movwf   scratch0
+    
+    movf    INDF1,W             ; was less than so replace W with the low limit
 
 notLower:
 
+    decf    FSR1,F              ; decrement FSR1 so that it points at the high limit upon exit again
+    
     return
 
 ; end applyLimitsToByteValue
@@ -6068,6 +6160,8 @@ rbd3:
 
 ; end of reallyBigDelay
 ;--------------------------------------------------------------------------------------------------
+    
+    org 0x800	;start code on page 2 of 2047 byte boundary
 
 ;--------------------------------------------------------------------------------------------------
 ; debugFunc1
@@ -6137,7 +6231,6 @@ dF1Loop:
     ; stuff a value into the PWM variables
 
     movlw   0xff
-    movwf   pwmDutyCycleHiByte
     movwf   pwmDutyCycleLoByte
     movwf   pwmPeriod
     movwf   pwmPolarity
@@ -6149,768 +6242,40 @@ dF1Loop:
 
 ; end of debugFunc1
 ;--------------------------------------------------------------------------------------------------
-
+    
 ;--------------------------------------------------------------------------------------------------
-; getStringChar
+; Strings in Program Memory
 ;
-; All the strings are stored here - the function returns one character from one string.
-;
-; On entry:
-;
-; Data Bank 0 should already be selected.
-; scratch0 contains index of desired string - first string is scratch0 = 0
-; W contains index of desired character - first character is W = 0
-;
-; On return W contains the character.
-; scratch1 contains the length of the string
-; Data Bank 0 will still be selected.
-;
-; CAUTION: No string can cross over the PCL boundary (256 bytes) - when adding a new string, use
-; org to reposition it if it will cross the boundary.  PCLATH MUST be adjusted for each string
-; to point to its bank location in memory:
-;
-;    movlw   0x0c            ; make sure this points to the page the string is on!!!!
-;    movwf   PCLATH
-;
-; CAUTION: If a string is inserted, all following strings must be checked to make sure they
-; are not shifted to span a PCL boundary (every 256 bytes) - use ORG to prevent this.  Every
-; value loaded into PCLATH must be checked. Use View/Disassembly to see the address positions.
-;
-; Uses W, PCLATH, scratch0, scratch1, scratch2
-;
-
-    org     0xc00           ; start on this boundary
-
-getStringChar:
-
-    incf    scratch0,F      ; increment to index properly
-    movwf   scratch2        ; store character selector
-
-string0:    ; "OPT AutoNotcher x.x"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string1         ; skip to next string if count not 0
-
-    movlw   #.20      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-
-    addwf   PCL,F
-    retlw   'O'
-    retlw   'P'
-    retlw   'T'
-    retlw   ' '
-    retlw   'A'
-    retlw   'u'
-    retlw   't'
-    retlw   'o'
-    retlw   'N'
-    retlw   'o'
-    retlw   't'
-    retlw   'c'
-    retlw   'h'
-    retlw   'e'
-    retlw   'r'
-    retlw   ' '
-    retlw   '7'
-    retlw   '.'
-    retlw   '7'
-    retlw   'f'
-
-string1:    ; "CHOOSE CONFIGURATION"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string2         ; skip to next string if count not 0
-
-    movlw   #.20      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
     
-    addwf   PCL,F
-    retlw   'C'
-    retlw   'H'
-    retlw   'O'
-    retlw   'O'
-    retlw   'S'
-    retlw   'E'
-    retlw   ' '
-    retlw   'C'
-    retlw   'O'
-    retlw   'N'
-    retlw   'F'
-    retlw   'I'
-    retlw   'G'
-    retlw   'U'
-    retlw   'R'
-    retlw   'A'
-    retlw   'T'
-    retlw   'I'
-    retlw   'O'
-    retlw   'N'
-
-string2:    ; "1 - EDM Notch Cutter"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string3         ; skip to next string if count not 0
-
-    movlw   #.20      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '1'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'E'
-    retlw   'D'
-    retlw   'M'
-    retlw   ' '
-    retlw   'N'
-    retlw   'o'
-    retlw   't'
-    retlw   'c'
-    retlw   'h'
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   't'
-    retlw   'e'
-    retlw   'r'
-
-string3:    ; "2 - EDM Extend Reach"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string4         ; skip to next string if count not 0
-
-    movlw   #.20      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '2'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'E'
-    retlw   'D'
-    retlw   'M'
-    retlw   ' '
-    retlw   'E'
-    retlw   'x'
-    retlw   't'
-    retlw   'e'
-    retlw   'n'
-    retlw   'd'
-    retlw   ' '
-    retlw   'R'
-    retlw   'e'
-    retlw   'a'
-    retlw   'c'
-    retlw   'h'
-
-string4:    ; "OPT EDM Notch Cutter"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string5         ; skip to next string if count not 0
-
-    movlw   #.20      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'O'
-    retlw   'P'
-    retlw   'T'
-    retlw   ' '
-    retlw   'E'
-    retlw   'D'
-    retlw   'M'
-    retlw   ' '
-    retlw   'N'
-    retlw   'o'
-    retlw   't'
-    retlw   'c'
-    retlw   'h'
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   't'
-    retlw   'e'
-    retlw   'r'
-
-string5:    ; "1 - Set Cut Depth"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string6         ; skip to next string if count not 0
-
-    movlw   #.17      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '1'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'S'
-    retlw   'e'
-    retlw   't'
-    retlw   ' '
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   ' '
-    retlw   'D'
-    retlw   'e'
-    retlw   'p'
-    retlw   't'
-    retlw   'h'
-
-string6:    ; "1 - Depth = "
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string7         ; skip to next string if count not 0
-
-    movlw   #.12      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '1'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'D'
-    retlw   'e'
-    retlw   'p'
-    retlw   't'
-    retlw   'h'
-    retlw   ' '
-    retlw   '='
-    retlw   ' '
-
-string7:    ; "2 - Cut Notch"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string8         ; skip to next string if count not 0
-
-    movlw   #.13      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '2'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   ' '
-    retlw   'N'
-    retlw   'o'
-    retlw   't'
-    retlw   'c'
-    retlw   'h'
-
-string8:    ; "3 - Jog Electrode"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string9         ; skip to next string if count not 0
-
-    movlw   #.17      
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '3'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'J'
-    retlw   'o'
-    retlw   'g'
-    retlw   ' '
-    retlw   'E'
-    retlw   'l'
-    retlw   'e'
-    retlw   'c'
-    retlw   't'
-    retlw   'r'
-    retlw   'o'
-    retlw   'd'
-    retlw   'e'
-
-string9:    ;"   Set Cut Depth"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string10        ; skip to next string if count not 0
-
-    movlw   #.16
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0c            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   ' '
-    retlw   ' '
-    retlw   ' '
-    retlw   'S'
-    retlw   'e'
-    retlw   't'
-    retlw   ' '
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   ' '
-    retlw   'D'
-    retlw   'e'
-    retlw   'p'
-    retlw   't'
-    retlw   'h'
-
-string10:    ;"0.000 inches"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string11        ; skip to next string if count not 0
-
-    movlw   #.12
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '0'
-    retlw   '.'
-    retlw   '0'
-    retlw   '0'
-    retlw   '0'
-    retlw   ' '
-    retlw   'i'
-    retlw   'n'
-    retlw   'c'
-    retlw   'h'
-    retlw   'e'
-    retlw   's'
-
-string11:    ;"Jog Mode"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string12        ; skip to next string if count not 0
-
-    movlw   #.8
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'J'
-    retlw   'o'
-    retlw   'g'
-    retlw   ' '
-    retlw   'M'
-    retlw   'o'
-    retlw   'd'
-    retlw   'e'
-
-string12:    ;"Zero or Exit"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string13        ; skip to next string if count not 0
-
-    movlw   #.12
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'Z'
-    retlw   'e'
-    retlw   'r'
-    retlw   'o'
-    retlw   ' '
-    retlw   'o'
-    retlw   'r'
-    retlw   ' '
-    retlw   'E'
-    retlw   'x'
-    retlw   'i'
-    retlw   't'
-
-string13:    ;"OPT EDM Extend Reach"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string14        ; skip to next string if count not 0
-
-    movlw   #.20
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'O'
-    retlw   'P'
-    retlw   'T'
-    retlw   ' '
-    retlw   'E'
-    retlw   'D'
-    retlw   'M'
-    retlw   ' '
-    retlw   'E'
-    retlw   'x'
-    retlw   't'
-    retlw   'e'
-    retlw   'n'
-    retlw   'd'
-    retlw   ' '
-    retlw   'R'
-    retlw   'e'
-    retlw   'a'
-    retlw   'c'
-    retlw   'h'
-
-string14:    ;"Turn on Cut Voltage"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string15        ; skip to next string if count not 0
-
-    movlw   #.19
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'T'
-    retlw   'u'
-    retlw   'r'
-    retlw   'n'
-    retlw   ' '
-    retlw   'o'
-    retlw   'n'
-    retlw   ' '
-    retlw   'C'
-    retlw   'u'
-    retlw   't'
-    retlw   ' '
-    retlw   'V'
-    retlw   'o'
-    retlw   'l'
-    retlw   't'
-    retlw   'a'
-    retlw   'g'
-    retlw   'e'
-
-string15:    ; "Up   Speed>"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string16        ; skip to next string if count not 0
-
-    movlw   #.11
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'U'
-    retlw   'p'
-    retlw   ' '
-    retlw   ' '
-    retlw   ' '
-    retlw   'S'
-    retlw   'p'
-    retlw   'e'
-    retlw   'e'
-    retlw   'd'
-    retlw   '>'
-   
-string16:   ; "Down  Stop>"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string17        ; skip to next string if count not 0
-
-    movlw   #.11
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'D'
-    retlw   'o'
-    retlw   'w'   
-    retlw   'n'
-    retlw   ' '
-    retlw   ' '
-    retlw   'S'
-    retlw   't'
-    retlw   'o'
-    retlw   'p'
-    retlw   '>'
-
-string17:   ; "Notch Mode"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string18        ; skip to next string if count not 0
-
-    movlw   #.10
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'N'
-    retlw   'o'
-    retlw   't'   
-    retlw   'c'
-    retlw   'h'
-    retlw   ' '
-    retlw   'M'
-    retlw   'o'
-    retlw   'd'
-    retlw   'e'
-
-string18:   ; "Wall Mode"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string19        ; skip to next string if count not 0
-
-    movlw   #.9
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'W'
-    retlw   'a'
-    retlw   'l'   
-    retlw   'l'
-    retlw   ' '
-    retlw   'M'
-    retlw   'o'
-    retlw   'd'
-    retlw   'e'
-
-string19:   ; "Cycle Test"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string20        ; skip to next string if count not 0
-
-    movlw   #.10
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'C'
-    retlw   'y'
-    retlw   'c'   
-    retlw   'l'
-    retlw   'e'
-    retlw   ' '
-    retlw   'T'
-    retlw   'e'
-    retlw   's'
-	retlw   't'
-
-string20:   ; "5 - Motor Dir "
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string21        ; skip to next string if count not 0
-
-    movlw   #.14
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '5'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'M'
-    retlw   'o'
-    retlw   't'   
-    retlw   'o'
-    retlw   'r'
-    retlw   ' '
-    retlw   'D'
-    retlw   'i'
-    retlw   'r'
-	retlw   ' '
-
-string21:   ; "4 - "
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string22        ; skip to next string if count not 0
-
-    movlw   #.4
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '4'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-
-string22:   ; "Normal"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string23        ; skip to next string if count not 0
-
-    movlw   #.6
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0d            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'N'
-    retlw   'o'
-    retlw   'r'
-    retlw   'm'
-    retlw   'a'
-    retlw   'l'
-
-    org     0xe00           ; skip ahead so string doesn't cross 256 byte boundary
-
-string23:   ; "Rev"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string24        ; skip to next string if count not 0
-
-    movlw   #.3
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0e            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'R'
-    retlw   'e'
-    retlw   'v'
-
-string24:   ; "6 - Erosion "
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string25        ; skip to next string if count not 0
-
-    movlw   #.12
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0e            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '6'
-    retlw   ' '
-    retlw   '-'
-    retlw   ' '
-    retlw   'E'
-    retlw   'r'
-    retlw   'o'   
-    retlw   's'
-    retlw   'i'
-    retlw   'o'
-    retlw   'n'
-	retlw   ' '
-
-string25:   ; "None"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string26        ; skip to next string if count not 0
-
-    movlw   #.4
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0e            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   'N'
-    retlw   'o'
-    retlw   'n'
-    retlw   'e'
-
-string26:   ; "17%"
-
-    decfsz  scratch0,F      ; count down until desired string reached
-    goto    string27        ; skip to next string if count not 0
-
-    movlw   #.3
-    movwf   scratch1        ; scratch1 = length of string
-
-    movlw   0x0e            ; point to this program memory page
-    movwf   PCLATH
-    movf    scratch2,W      ; restore character selector
-    
-    addwf   PCL,F
-    retlw   '1'
-    retlw   '7'
-    retlw   '%'
-
-string27:
-    return                  ; no string here yet
-
-; end of getStringChar
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','g',0x00
+string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
+string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
+string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
+string4	    dw	'O','P','T',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
+string5	    dw	'1',' ','-',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
+string6	    dw	'1',' ','-',' ','D','e','p','t','h',' ','=',' ',0x00
+string7	    dw	'2',' ','-',' ','C','u','t',' ','N','o','t','c','h',0x00
+string8	    dw	'3',' ','-',' ','J','o','g',' ','E','l','e','c','t','r','o','d','e',0x00
+string9	    dw	' ',' ',' ','S','e','t',' ','C','u','t',' ','D','e','p','t','h',0x00
+string10    dw	'0','.','0','0','0',' ','i','n','c','h','e','s',0x00
+string11    dw	'J','o','g',' ','M','o','d','e',0x00
+string12    dw	'Z','e','r','o',' ','o','r',' ','E','x','i','t',0x00
+string13    dw	'O','P','T',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
+string14    dw	'T','u','r','n',' ','o','n',' ','C','u','t',' ','V','o','l','t','a','g','e',0x00
+string15    dw	'U','p',' ',' ',' ','S','p','e','e','d','>',0x00
+string16    dw	'D','o','w',   'n',' ',' ','S','t','o','p','>',0x00
+string17    dw	'N','o','t',   'c','h',' ','M','o','d','e',0x00
+string18    dw	'W','a','l',   'l',' ','M','o','d','e',0x00
+string19    dw	'C','y','c','l','e',' ','T','e','s','t',0x00
+string20    dw	'5',' ','-',' ','M','o','t','o','r',' ','D','i','r',' ',0x00
+string21    dw	'4',' ','-',' ',0x00
+string22    dw	'N','o','r','m','a','l',0x00
+string23    dw	'R','e','v',0x00
+string24    dw	'6',' ','-',' ','E','r','o','s','i','o','n',' ',0x00
+string25    dw	'N','o','n','e',0x00
+string26    dw	'1','7','%',0x00
+
+; end of Strings in Program Memory
 ;--------------------------------------------------------------------------------------------------
 
     END
