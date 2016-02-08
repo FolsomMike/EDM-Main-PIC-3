@@ -752,6 +752,10 @@ BLINK_ON_FLAG			EQU		0x01
     step2                  
     step1
     step0                  ; least significant digit
+    
+    scratchc0               ; scratches defined in bank c(2) so that we don't have to switch
+    scratchc1               ; banks all the time
+    scratchc2
 
  endc
 
@@ -789,10 +793,10 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock 	0x0      	; Variables start in RAM at 0x0
 	
-	eeDepth3                ; storage for depth value
-    eeDepth2
-    eeDepth1
-    eeDepth0
+	eeTarget3           ; storage for target depth value
+    eeTarget2
+    eeTarget1
+    eeTarget0
 
     eeFlags
     eeFlags2
@@ -890,15 +894,15 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
 
 start:
 
-    movlw   high debugFunc1
-    movwf   PCLATH
-    call    debugFunc1 ; debug mks -- remove this
-    movlw   high start
-    movwf   PCLATH
+    ;movlw   high debugFunc1
+    ;movwf   PCLATH
+    ;call    debugFunc1 ; debug mks -- remove this
+    ;movlw   high start
+    ;movwf   PCLATH
 
     call    setup           ; preset variables and configure hardware
     
-    goto doExtModeMenuA ;//DEBUG HSS
+    goto    debugHSS
 
 menuLoop:
 
@@ -989,7 +993,7 @@ setup:
     movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
     movwf   sparkLevel          ; save the selected value
 
-    call    readDepthValueFromEEprom    ; read the value stored for depth from the EEProm
+    call    readTargetValueFromEEprom    ; read the value stored for depth from the EEProm
 
     call    readPWMValsFrmEEpromSendLEDPIC
 
@@ -1466,23 +1470,25 @@ setLowCurrentLimitDigitalPot:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; readDepthValueFromEEprom
+; readTargetValueFromEEprom
 ;
-; Reads the user set cut depth value from eeprom. These are unpacked BCD digits.
+; Reads the user set target depth value from eeprom. These are unpacked BCD digits.
 ;
-; Each digit is checked for valid range of 0-9 and force to that range.
+; Each digit is checked for valid range of 0-9 and forced to that range.
 ;
 ; Note: these variables must be kept contiguous in memory and eeprom.
 ;
 
-readDepthValueFromEEprom:
+readTargetValueFromEEprom:
 
-    banksel depth3
+    banksel target9
 
-    movlw   depth3          ; address in RAM
+    movlw   high target9
+    movwf   FSR0H
+    movlw   low target9      ; address in RAM
     movwf   FSR0L
     clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
+    movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; read 4 bytes
@@ -1490,33 +1496,33 @@ readDepthValueFromEEprom:
 
     ; check each digit for illegal BCD value (0-9)
 
-    movf    depth3,W
-    movwf   scratch0
+debugHSS:                           ;//DEBUG HSS// -- remove later
+    
+    banksel target9                 ;//DEBUG HSS// -- remove later
+    
+    movf    target9,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth3
+    movwf   target9
 
-    movf    depth2,W
-    movwf   scratch0
+    movf    target8,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth2
+    movwf   target8
 
-    movf    depth1,W
-    movwf   scratch0
+    movf    target7,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth1
+    movwf   target7
 
-    movf    depth0,W
-    movwf   scratch0
+    movf    target6,W
+    movwf   scratchc2
     call    applyBCDDigitLimits
-    movf    scratch0,W
-    movwf   depth0
+    movwf   target6
 
     return
 
-; end of readDepthValueFromEEprom
+; end of readTargetValueFromEEprom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1529,12 +1535,12 @@ readDepthValueFromEEprom:
 
 saveDepthValueToEEprom:
 
-    banksel depth3
+    banksel eeTarget3
 
-    movlw   depth3          ; address in RAM
+    movlw   target9          ; address in RAM
     movwf   FSR0L
     clrf    eepromAddressH
-    movlw   eeDepth3        ; address in EEprom
+    movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
     movlw   .4
     movwf   eepromCount     ; write 4 bytes
@@ -1570,23 +1576,26 @@ readSparkLevelsFromEEprom:
 
     banksel scratch0
 
+    movlw   high scratch0               ; point FSR0 at the high limit
+    movwf   FSR1H
+    movlw   low scratch0
+    movwf   FSR1L
+
+    movlw   0x81                        ; upper limit
+    movwf   scratch0
     movlw   0x01                        ; lower limit
     movwf   scratch1
-    movlw   0x81                        ; upper limit
-    movwf   scratch2
 
     movf    sparkLevelNotch,W           ; limit notch spark level value
-    movwf   scratch0
+    movwf   scratch2
     call    applyLimitsToByteValue
-    movf    scratch0,W                  ; update variable with clipped value
-    movwf   sparkLevelNotch
+    movwf   sparkLevelNotch             ; update variable with clipped value
 
     movf    sparkLevelWall,W            ; limit wall spark level value
-    movwf   scratch0
+    movwf   scratch2
     call    applyLimitsToByteValue
-    movf    scratch0,W                  ; update variable with clipped value
-    movwf   sparkLevelWall
-
+    movwf   sparkLevelWall              ; update variable with clipped value
+    
     return
 
 ; end of readSparkLevelsFromEEprom
@@ -2194,15 +2203,15 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     
     movf    cursorPos,W		; load the cursor position to highlight the current choice
     call    writeControl    ; write line 3 column 1
-	call	turnOnBlink
+    call    turnOnBlink
     call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
 
 ; scan for button inputs, highlight selected option, will return when Reset/Enter/Zero pressed
 
 LoopDEMM1:
 
-	bcf		menuOption,7		; clear the menu page change flags
-	bcf		menuOption,6
+    bcf		menuOption,7		; clear the menu page change flags
+    bcf		menuOption,6
 
     movlw   .02                 ; maximum menu option number
     call    handleMenuInputs
@@ -2218,7 +2227,7 @@ LoopDEMM1:
     ; handle option 1 - non-extended reach cutting head installed
 
     bcf     flags,EXTENDED_MODE ; set flag to 0
-
+    
     ; copy value for the standard tool to the inches/motor step variable
 
     movlw   high step10         ; destination variable
@@ -2306,6 +2315,8 @@ skipDEMM7:
 	goto	LoopDEMM1
 
 exitDEMM7:
+    
+    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
     
     return    
 
@@ -6011,22 +6022,33 @@ applyASCIINumDigitLimits:
 ;--------------------------------------------------------------------------------------------------
 ; applyBCDDigitLimits
 ;
-; Limits an unpacked BCD value in scratch0 between 0 and 9.
+; Limits an unpacked BCD value in scratchc2 between 0 and 9.
 ;
-; Compares the value in scratch0 with 0 and 9. If the value is less than that for
-; the 0, it is replaced with that value. If greater than 9, it is replaced
-; with that value.
+; Compares the value in scratchc2 with 0 and 9. If the value is less than that for the 0, it is 
+; replaced with that value. If greater than 9, it is replaced with that value.
+;
+; ON ENTRY:
+    
+;   scratchc2 = original value to check
+;
+; ON EXIT:
+;
+;   If 0 < value < 9        W = original value      [FSR1+2]
+;   If value < 0            W = low limit           [FSR1+1]
+;   If value > 9            W = high limit          [FSR1]
 ;
 
 applyBCDDigitLimits:
 
-    banksel scratch0
+    movlw   high scratchc0               ; point FSR0 at the high limit
+    movwf   FSR1H
+    movlw   low scratchc0
+    movwf   FSR1L
 
-    movlw   .0                           ; lower limit for unpacked BCD
-    movwf   scratch1
-
-    movlw   .9                           ; upper limit for unpacked BCD
-    movwf   scratch2
+    movlw   .9                          ; upper limit for unpacked BCD
+    movwf   scratchc0
+    movlw   .0                          ; lower limit for unpacked BCD
+    movwf   scratchc1
 
     goto    applyLimitsToByteValue
 
@@ -6038,36 +6060,48 @@ applyBCDDigitLimits:
 ;
 ; Clips a value between a lower and upper limit.
 ;
-; Compares the value in scratch0 with the lower limit in scratch1 and the upper limit in scratch2.
+; Compares the value in [FSR1+2] with the limits pointed to by FSR1. FSR1 points to the high limit
+; value, the low limit should be in [FSR1+1].
 ;
-; If scratch0 < scratch1, scratch0 = scratch1
-; If scratch0 > scratch2, scratch0 = scratch2
+; ON ENTRY:
+;
+;   [FSR1]      =   high limit
+;   [FSR1+1]    =   low limit
+;   [FSR1+2]    =   original value to check against limits
+;
+; ON EXIT:
+;
+;   If low limit < value < high limit     W = original value      [FSR1+2]
+;   If value < low limit                  W = low limit           [FSR1+1]
+;   If value > high limit,                W = high limit          [FSR1]
 ;
 
 applyLimitsToByteValue:
-
-    banksel scratch0
-
-    movf    scratch0,W          ; check if scratch0 greater than scratch2
-    subwf   scratch2,W
-    btfsc   STATUS,C
+   
+    moviw   2[FSR1]             ; load value into W
+    subwf   INDF1,W             ; check if value greater than high limit
+    moviw   2[FSR1]             ; load value into W
+    btfsc   STATUS,C            ; skip next line if value greater than high limit
     goto    notHigher
 
-    movf    scratch2,W          ; was greater than so replace scratch0 with scratch1
-    movwf   scratch0
+    movf    INDF1,W             ; was greater than so replace W with the high limit
+    
+    return
 
 notHigher:
 
-    movf    scratch1,W          ; check if scratch0 less than scratch1
-    subwf   scratch0,W
-    btfsc   STATUS,C
+    incf    FSR1,F              ; FSR1 will now point to the low limit
+    subwf   INDF1,W             ; check if value less than or equal to low limit
+    moviw   1[FSR1]             ; load value into W
+    btfss   STATUS,C            ; skip next line if value lower than or equal to low limit
     goto    notLower
-
-    movf    scratch1,W          ; was less than so replace scratch0 with scratch1
-    movwf   scratch0
+    
+    movf    INDF1,W             ; was less than so replace W with the low limit
 
 notLower:
 
+    decf    FSR1,F              ; decrement FSR1 so that it points at the high limit upon exit again
+    
     return
 
 ; end applyLimitsToByteValue
@@ -6198,7 +6232,7 @@ dF1Loop:
 ; Strings in Program Memory
 ;
     
-string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','f',0x00
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','g',0x00
 string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
 string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
 string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
