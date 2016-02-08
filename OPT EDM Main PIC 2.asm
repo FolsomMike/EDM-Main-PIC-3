@@ -232,7 +232,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-#define debug 1     ; set debug testing "on" ;//DEBUG HSS -- comment this out later
+;#define debug 1     ; set debug testing "on" ;//DEBUG HSS -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -901,8 +901,6 @@ start:
     ;movwf   PCLATH
 
     call    setup           ; preset variables and configure hardware
-    
-    goto    debugHSS
 
 menuLoop:
 
@@ -1481,12 +1479,12 @@ setLowCurrentLimitDigitalPot:
 
 readTargetValueFromEEprom:
 
-    banksel target9
-
     movlw   high target9
     movwf   FSR0H
     movlw   low target9      ; address in RAM
     movwf   FSR0L
+    
+    banksel eepromAddressH
     clrf    eepromAddressH
     movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
@@ -1495,11 +1493,7 @@ readTargetValueFromEEprom:
     call    readFromEEprom
 
     ; check each digit for illegal BCD value (0-9)
-
-debugHSS:                           ;//DEBUG HSS// -- remove later
-    
-    banksel target9                 ;//DEBUG HSS// -- remove later
-    
+    banksel target9
     movf    target9,W
     movwf   scratchc2
     call    applyBCDDigitLimits
@@ -4536,7 +4530,7 @@ displayBCDVar:
 
 loopDBV1:
 
-    movwi   FSR1++
+    moviw   FSR1++
     addlw   0x30            ; convert BCD digit to ASCII
     call    writeChar       ; write the first digit
 
