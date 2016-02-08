@@ -2468,7 +2468,7 @@ loopDMM1:
 
     ; handle option 1 - set cut depth
     
-    call    setDepth        ; allow user to adjust the depth value
+    call    setTarget        ; allow user to adjust the depth value
 
     goto    doMainMenu      ; repeat main menu
 
@@ -3684,7 +3684,7 @@ pulseMotorNoDelay:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; setDepth
+; setTarget
 ;
 ; This function allows the user to set the depth of the cut.
 ; The most significant digit is not edited, so it is always zero. The next four digits are
@@ -3696,7 +3696,7 @@ pulseMotorNoDelay:
 ; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
 ; 
 
-setDepth:
+setTarget:
 
 ; set up the display
 
@@ -3788,7 +3788,7 @@ endSD:
 
     goto    setCutMode
 
-; end of setDepth
+; end of setTarget
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
