@@ -893,8 +893,6 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
 
 start:
 
-    call    debugFunc1 ; debug mks -- remove this
-
     call    setup           ; preset variables and configure hardware
 
 menuLoop:
@@ -2374,9 +2372,9 @@ skipDMM:
     call    writeControl    ; position at line 2 column 1
 
     movlw   depth3
-    call    isZero          ; is depth variable zero?
+    call    isTargetZero    ; is target variable zero?
     btfss   STATUS,Z
-    goto    skipString5     ; if not zero, jump to display the depth
+    goto    skipString5     ; if not zero, jump to display the target
 
     movlw   .5              ; "1 - Set Cut Depth"
     call    printString     ; print the string
@@ -3620,6 +3618,10 @@ pulseMotorNoDelay:
 ; setDepth
 ;
 ; This function allows the user to set the depth of the cut.
+; The most significant digit is not edited, so it is always zero. The next four digits are
+; editable. The editable/ignored digits are:
+;       nEEEEnnnnnn
+;   where n represents non-editable digits while E represents editable digits.
 ; 
 ; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState, buttonPrev,
 ; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
@@ -3663,8 +3665,13 @@ setDepth:
 
 ; handle editing
 
-    movlw   depth3          
-    movwf   scratch7        ; first character being edited
+    clrf    scratch7        ; track character being modified -- 0 for leftmost character
+                            ; 4 characters -- 4 digits, decimal point gets skipped
+
+    movlw   high target9    ; first digit in variable being edited
+    movwf   FSR1H
+    movlw   low target9          
+    movwf   FSR1L
     
     movlw   0xc4
     movwf   cursorPos       ; cursor position
@@ -3672,19 +3679,19 @@ setDepth:
 loopSD:
 
     call    adjustBCDDigit  ; handle editing of the digit
-        
-    incf    scratch7,f      ; point to the next digit
 
-    movlw   depth0
-    addlw   .1
+    addfsr  FSR1,1          ; point to the next digit
+    incf    scratch7,f      ; track character being modified
+
+    movlw   .4              ; exit if past the last character
     subwf   scratch7,W
     btfsc   STATUS,Z
-    goto    endSD           ; exit if past the last digit in the variable
+    goto    endSD
 
-    movlw   depth2
+    movlw   .1              ; if on second digit, move cursor again to skip decimal point
     subwf   scratch7,W
     btfsc   STATUS,Z
-    incf    cursorPos,F     ; if on second digit, move cursor twice to skip decimal point
+    incf    cursorPos,F
 
     incf    cursorPos,F     ; move the cursor to the next digit
     
@@ -3786,7 +3793,7 @@ skip_dwnSCM:
 ;
 ; On entry
 ;
-; scratch7 = memory address of the digit
+; FSR1 = memory address of the digit
 ; cursorPos = screen location of the digit
 ;
 ; Uses W, FSR0, buttonState, buttonPrev, cursorPos
@@ -3804,17 +3811,15 @@ loopABD:
 
 ; jog up button press    
 
-    movf    scratch7,W
-    movwf   FSR0L
-    incf    INDF0,F         ; increment the digit
+    incf    INDF1,F         ; increment the digit
     
     movlw   .10
-    subwf   INDF0,W         ; check if 10 reached
+    subwf   INDF1,W         ; check if 10 reached
     btfss   STATUS,Z
     goto    updateABD       ; display the digit
 
     movlw   .0
-    movwf   INDF0           ; roll around to 0 after 9
+    movwf   INDF1           ; roll around to 0 after 9
 
     goto    updateABD       ; display the digit
 
@@ -3825,17 +3830,15 @@ skip_upABD:
 
 ; jog down button press
 
-    movf    scratch7,W
-    movwf   FSR0L
-    decf    INDF0,F         ; decrement the digit
+    decf    INDF1,F         ; decrement the digit
     
     movlw   0xff            
-    subwf   INDF0,W         ; check if less than 0
+    subwf   INDF1,W         ; check if less than 0
     btfss   STATUS,Z
     goto    updateABD       ; display the digit
 
     movlw   .9
-    movwf   INDF0           ; roll around to 9 after 0
+    movwf   INDF1           ; roll around to 9 after 0
 
     goto    updateABD       ; display the digit
 
@@ -3855,14 +3858,12 @@ updateABD:
     movf    cursorPos,W
     call    writeControl    ; prepare to overwrite the digit
     
-    movf    scratch7,W
-    movwf   FSR0L
-    movf    INDF0,W
+    movf    INDF1,W
     addlw   0x30            ; convert to ASCII
     call    writeChar       ; write the digit
 
     movf    cursorPos,W
-    call    writeControl    ; 
+    call    writeControl
 	call	turnOnBlink
 
     call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
@@ -4516,45 +4517,6 @@ displaySpeedAndPower:
 
 ; end of displaySpeedAndPower
 ;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; isZero
-;
-; Checks the four byte variable addressed by the value in W to see if it is zero.
-;
-; On entry:
-;
-; W contains address of variable.
-;
-; On return Z bit is set if value is zero, cleared otherwise.
-;
-; Uses W, FSR0, scratch0
-;
-
-isZero:
-
-    movwf   FSR0L           ; point FSR at first digit
-    
-    movlw   .4              
-    movwf   scratch0        ; four bytes
-
-loopIZ1:
-
-    movf    INDF0,W         ; check each byte
-    btfss   STATUS,Z        ; if any byte not zero return
-    return
-
-    incf    FSR0L,F         ; point to next digit
-
-    decfsz  scratch0,F      ; stop when count is zero
-    goto    loopIZ1
-
-    bsf     STATUS,Z        ; set the Z flag - variable was zero
-
-    return
-
-; end of isZero
-;--------------------------------------------------------------------------------------------------
    
 ;--------------------------------------------------------------------------------------------------
 ; SetBank0ClrWDT        
@@ -4597,7 +4559,11 @@ bigDelay:
 bigDelayA:
     movwf   scratch0        ; store W
 
-LoopBD1:
+    ifdef debug       ; if debugging, don't delay
+    return
+    endif
+
+loopBD1:
 
 	; call inner delay for each count of outer delay
 
@@ -4615,7 +4581,7 @@ LoopBD1:
 	btfsc	STATUS,Z
 	goto    SetBank0ClrWDT  ; counter = 0, reset stuff and return
 
-    goto    LoopBD1         ; loop until outer counter is zero
+    goto    loopBD1         ; loop until outer counter is zero
 
 ; end of bigDelay
 ;--------------------------------------------------------------------------------------------------
@@ -4636,7 +4602,11 @@ smallDelay:
 smallDelayA:
     movwf   scratch2        ; store W
 
-LoopSD1:
+    ifdef debug       ; if debugging, don't delay
+    return
+    endif
+
+loopSD1:
 
     clrwdt                  ; keep watch dog timer from triggering
 
@@ -4649,7 +4619,7 @@ LoopSD1:
 	btfsc	STATUS,Z
 	return
 
-    goto    LoopSD1         ; loop until outer counter is zero
+    goto    loopSD1         ; loop until outer counter is zero
 
 ; end of smallDelay
 ;--------------------------------------------------------------------------------------------------
@@ -5076,6 +5046,51 @@ isDepthZero:
     movlw   low depth10
     movwf   FSR0L
 
+    goto    isZero
+
+; end of isDepthZero
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; isTargetZero
+;
+; Checks if the target depth position variable is zero.
+;
+; On entry:
+;
+; On return, Z = 1 if variable is zero.
+;
+; Uses W, FSR
+;
+
+isTargetZero:
+
+    movlw   high target10    ; point to target depth position variable
+    movwf   FSR0H
+    movlw   low target10
+    movwf   FSR0L
+
+    goto    isZero
+
+; end of isTargetZero
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; isZero
+;
+; Checks if the variable is zero.
+;
+; On entry:
+;
+; FSR0 points to first byte of variable.
+;
+; On return, Z = 1 if variable is zero.
+;
+; Uses W, FSR
+;
+
+isZero:
+
     moviw   FSR0++
     btfss   STATUS,Z        ; check digit 10 for zero
     return
@@ -5120,7 +5135,7 @@ isDepthZero:
 
     return
 
-; end of isDepthZero
+; end of isZero
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -6018,6 +6033,10 @@ notLower:
 ;
 
 reallyBigDelay:
+
+    ifdef debug       ; if debugging, don't delay
+    return
+    endif
 
     banksel scratch6
 
