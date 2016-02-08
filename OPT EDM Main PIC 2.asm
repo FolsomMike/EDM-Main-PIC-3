@@ -6090,7 +6090,7 @@ applyLimitsToByteValue:
 
 notHigher:
 
-    incf    FSR1,F              ; FSR1 will now point to the low limit
+    ADDFSR  FSR1,1              ; FSR1 will now point to the low limit
     subwf   INDF1,W             ; check if value less than or equal to low limit
     moviw   1[FSR1]             ; load value into W
     btfss   STATUS,C            ; skip next line if value lower than or equal to low limit
