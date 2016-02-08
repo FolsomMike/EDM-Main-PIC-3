@@ -623,8 +623,10 @@ BLINK_ON_FLAG			EQU		0x01
 
     LCDBitCount             ; tracks bits of byte being transmitted to LCD
     LCDBufferCnt            ; number of characters in the buffer
-    LCDBufferPtr            ; points to next byte in buffer to be transmitted to LCD 
-
+    
+    LCDBufferPtrH           ; points to next byte in buffer to be transmitted to LCD 
+    LCDBufferPtrL
+    
     LCDDelay1               ; delay counter for providing necessary time delay between
     LCDDelay0               ;    chars
 
@@ -994,8 +996,11 @@ setup:
     banksel LCDFlags
 
     clrf    LCDFlags        
-    movlw   LCDBuffer0
-    movwf   LCDBufferPtr
+    movlw   high LCDBuffer0
+    movwf   LCDBufferPtrH
+    movlw   low LCDBuffer0
+    movwf   LCDBufferPtrL
+
     clrf    LCDBufferCnt    ; no characters in the buffer
 	
 ; enable the interrupts
@@ -1889,8 +1894,11 @@ doLCD:
     goto    endISR
 
     clrf    LCDFlags            ; if end of buffer reached, set LCD not busy
-    movlw   LCDBuffer0
-    movwf   LCDBufferPtr        ; reset pointer to beginning of the buffer
+    movlw   high LCDBuffer0     ; reset pointer to beginning of the buffer
+    movwf   LCDBufferPtrH
+    movlw   low LCDBuffer0
+    movwf   LCDBufferPtrL    
+        
     clrf    LCDBufferCnt        ; no characters in the buffer
 
     goto    endISR
@@ -1934,9 +1942,11 @@ stopBitCheck:
 
 transmitByteT0I:
 
-    movf    LCDBufferPtr,W  ; get pointer to next character to be transmitted
-    movwf   FSR0L           ; point FSR at the character
-    rlf     INDF0,F         ; get the first bit to transmit
+    movf    LCDBufferPtrH,W     ; get pointer to next character to be transmitted
+    movwf   FSR0H
+    movf    LCDBufferPtrL,W
+    movwf   FSR0L
+    rlf     INDF0,F             ; get the first bit to transmit
 
     banksel SERIAL_OUT_P
 
@@ -1954,8 +1964,10 @@ endOfByteCheck:
 
     bsf     LCDFlags,stopBit    ; signal to transmit stop bit on next interrupt
 
-    incf    LCDBufferPtr,F      ; point to next character in buffer
-
+    incf    LCDBufferPtrL,F     ; point to next character in buffer
+    btfsc   STATUS,Z
+    incf    LCDBufferPtrH,F
+    
     decfsz  LCDBufferCnt,F      ; buffer empty?
     goto    endISR
 
@@ -2159,7 +2171,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1L
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
-
+    
     movlw   0xc0	    ; set position for writeControl to line 2, column 1
     call    writeControl    ; position at line 2 column 1
     movlw   high string1    ; "CHOOSE CONFIGURATION"
@@ -2391,7 +2403,6 @@ skipDMM:
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
 
-    movlw   depth3
     call    isTargetZero    ; is target variable zero?
     btfss   STATUS,Z
     goto    skipString5     ; if not zero, jump to display the target
@@ -2403,7 +2414,7 @@ skipDMM:
     call    printString     ; print the string
     call    waitLCD         ; wait until buffer printed
     
-    goto    skipString6;
+    goto    skipString6
 
 ; if target depth already set (!=0), display the target depth value
 
@@ -5150,7 +5161,9 @@ isDepthZero:
 ;
 ; On entry:
 ;
-; On return, Z = 1 if variable is zero.
+; On return:
+;
+;   Z = 1 if variable is zero.
 ;
 ; Uses W, FSR
 ;
@@ -5278,8 +5291,11 @@ flushLCD:
 
     banksel LCDBuffer0
 
-    movlw   LCDBuffer0
-    movwf   LCDBufferPtr
+    movlw   high LCDBuffer0     ; reset pointer to beginning of the buffer
+    movwf   LCDBufferPtrH
+    movlw   low LCDBuffer0
+    movwf   LCDBufferPtrL    
+    
     bsf     LCDFlags,startBit
     bsf     LCDFlags,LCDBusy    ; set this bit last to make sure everything set up before interrupt
 
@@ -5489,16 +5505,21 @@ writeByteLCD:
 
     movwf   LCDScratch0     ; store character
 
-    movf    LCDBufferPtr,W
-    movwf   FSR0L           ; point to next buffer position
+    movf    LCDBufferPtrH,W     ; get pointer to next buffer position
+    movwf   FSR0H
+    movf    LCDBufferPtrL,W
+    movwf   FSR0L
 
     movf    LCDScratch0,W   ; retrieve character
 
     movwf   INDF0           ; store character in buffer
 
     incf    LCDBufferCnt,F  ; count characters placed in the buffer
-    incf    LCDBufferPtr,F  ; point to next buffer position
 
+    incf    LCDBufferPtrL,F     ; point to next character in buffer
+    btfsc   STATUS,Z
+    incf    LCDBufferPtrH,F
+    
     banksel flags
 
     return    
