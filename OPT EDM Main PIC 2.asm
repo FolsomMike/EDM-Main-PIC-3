@@ -1478,7 +1478,7 @@ useStdErosionFactor:
 
 copyStdStepValue:
 
-    movlw   .11                 ; number of bytes
+    movlw   .12                 ; number of bytes
     call    copyBytes
     
     ; standard head mode values
@@ -1520,7 +1520,7 @@ useExtErosionFactor:
 
 copyExtStepValue:
 
-    movlw   .11                 ; number of bytes
+    movlw   .12                 ; number of bytes
     call    copyBytes
 
     ; extended head values
@@ -1945,12 +1945,14 @@ skipDMMP24:
 	goto	skipDMMP25
 
 	bcf		flags2,EROSION_MODE     ; set erosion factor to none
+    ;//WIP HSS// -- actually update step values and set depth to 0
 	call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP25:
 
 	bsf		flags2,EROSION_MODE     ; set erosion mode to 17%
+    ;//WIP HSS// -- actually update step values and set depth to 0
     call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
 
@@ -6299,17 +6301,19 @@ dF1Loop:
 ; NOTE: program memory is only 14 bits wide. Using dw rather than db forces each value to fill
 ; an entire 14 bit word rather than being packed two values to a word.
 ;
+; Last digit is sign: 0 for positive; 1 for negative
+;
 ; 00.000217391 -> standard tool with no erosion factor ~ inches/motor pulse
-stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1     ; unpacked BCD ~ xx.xxxxxxxxx
+stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
 ; 00.000180435 -> standard tool with 17% erosion factor ~ inches/motor pulse
-std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5     ; unpacked BCD ~ xx.xxxxxxxxx
+std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
 ; 00.000023774 -> extended tool with no erosion factor ~ inches/motor pulse
-extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4     ; unpacked BCD ~ xx.xxxxxxxxx
+extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
 ; 00.000019732 -> extended tool with 17% erosion factor ~ inches/motor pulse
-ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
+ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
 ; end of Constants in Program Memory
 ;--------------------------------------------------------------------------------------------------
