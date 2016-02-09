@@ -736,6 +736,7 @@ BLINK_ON_FLAG			EQU		0x01
     target2                  
     target1
     target0                 ; least significant digit
+    targetSign
 
     ; Number of inches per motor step -- used to update the depth value for each step.
     ; The appropriate step value for the selected head and erosion rate are copied here for
@@ -754,6 +755,7 @@ BLINK_ON_FLAG			EQU		0x01
     step2                  
     step1
     step0                  ; least significant digit
+    stepSign
     
     scratchc0               ; scratches defined in bank c(2) so that we don't have to switch
     scratchc1               ; banks all the time
@@ -763,25 +765,19 @@ BLINK_ON_FLAG			EQU		0x01
 
 ;-----------------
  
-; Define variables in the memory which is mirrored in all 4 RAM banks.  This area is usually used
-; by the interrupt routine for saving register states because there is no need to worry about
-; which bank is current when the interrupt is invoked.
-; On the PIC16F628A, 0x70 thru 0x7f is mirrored in all 4 RAM banks.
-
-; NOTE:
-; This block cannot be used in ANY bank other than by the interrupt routine.
-; The mirrored sections:
+; Define variables in the memory which is mirrored in all RAM banks.
+;
+; On older PICs, this section was used to store context registers during an interrupt as the
+; current bank was unknown upon entering the interrupt. Now, the section can be used for any
+; purpose as the more powerful PICs automatically save the context on interrupt.
 ;
 ;	Bank 0		Bank 1		Bank 2		Bank3
 ;	70h-7fh		f0h-ffh		170h-17fh	1f0h-1ffh
 ;
 
  cblock	0x70
-    W_TEMP
-    FSR0L_TEMP
-    FSR0H_TEMP
-    STATUS_TEMP
-    PCLATH_TEMP	
+
+ 
  endc
 
 ; end of Variables in RAM
@@ -938,9 +934,6 @@ setup:
     call    setDigitalPots  ; set digital pot values to stored values
 
 ;start of hardware configuration
-
-    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
-    clrf   FSR1H
 
     clrf    INTCON          ; disable all interrupts
 
@@ -1254,7 +1247,9 @@ sendPWMValuesToLEDPIC:
     banksel pwmSetCommandByte
     movwf   pwmSetCommandByte
 
-    movlw   pwmSetCommandByte       ; point to first byte to be sent
+    movlw   high pwmSetCommandByte       ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low pwmSetCommandByte
     movwf   FSR0L
 
     call    sendBytesToLEDPICViaI2C
@@ -1329,7 +1324,10 @@ sendLEDArrayValues:
     movwf   scratch0
     movlw   LEDPIC_SET_LEDS         ; put command byte in scratch1
     movwf   scratch1
-    movlw   scratch1                ; point to first byte to be sent
+
+    movlw   high scratch1           ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low scratch1
     movwf   FSR0L
 
     call    sendBytesToLEDPICViaI2C
@@ -1354,7 +1352,10 @@ sendLEDPICStart:
     movwf   scratch0
     movlw   LEDPIC_START            ; put command byte in scratch1
     movwf   scratch1
-    movlw   scratch1                ; point to first byte to be sent
+    
+    movlw   high scratch1           ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low scratch1
     movwf   FSR0L
 
     call    sendBytesToLEDPICViaI2C
@@ -1530,8 +1531,11 @@ saveDepthValueToEEprom:
 
     banksel eeTarget3
 
-    movlw   target9          ; address in RAM
+    movlw   high target9     ; address in RAM
+    movwf   FSR0H
+    movlw   low target9
     movwf   FSR0L
+        
     clrf    eepromAddressH
     movlw   eeTarget3        ; address in EEprom
     movwf   eepromAddressL
@@ -1556,8 +1560,11 @@ readSparkLevelsFromEEprom:
 
     banksel sparkLevelNotch
 
-    movlw   sparkLevelNotch     ; address in RAM
+    movlw   high sparkLevelNotch    ; address in RAM
+    movwf   FSR0H
+    movlw   low sparkLevelNotch
     movwf   FSR0L
+
     clrf    eepromAddressH
     movlw   eeSparkLevelNotch   ; address in EEprom
     movwf   eepromAddressL
@@ -1605,8 +1612,11 @@ saveSparkLevelsToEEprom:
 
     banksel sparkLevelNotch
 
-    movlw   sparkLevelNotch     ; address in RAM
+    movlw   high sparkLevelNotch     ; address in RAM
+    movwf   FSR0H
+    movlw   low sparkLevelNotch
     movwf   FSR0L
+        
     clrf    eepromAddressH
     movlw   eeSparkLevelNotch   ; address in EEprom
     movwf   eepromAddressL
@@ -1628,9 +1638,12 @@ saveSparkLevelsToEEprom:
 readFlagsFromEEprom:
 
     banksel flags
-
-    movlw   flags           ; address in RAM
+    
+    movlw   high flags      ; address in RAM
+    movwf   FSR0H
+    movlw   low flags
     movwf   FSR0L
+        
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
@@ -1653,8 +1666,11 @@ saveFlagsToEEprom:
 
     banksel flags
 
-    movlw   flags           ; address in RAM
+    movlw   high flags      ; address in RAM
+    movwf   FSR0H
+    movlw   low flags
     movwf   FSR0L
+    
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
@@ -1693,8 +1709,11 @@ readPWMValuesFromEEprom:
 
     banksel pwmDutyCycleHiByte
 
-    movlw   pwmDutyCycleHiByte           ; address in RAM
+    movlw   high pwmDutyCycleHiByte      ; address in RAM
+    movwf   FSR0H
+    movlw   low pwmDutyCycleHiByte
     movwf   FSR0L
+        
     clrf    eepromAddressH
     movlw   eePWMDutyCycleHiByte         ; address in EEprom
     movwf   eepromAddressL
@@ -1775,8 +1794,11 @@ savePWMValuesToEEprom:
     addlw   1                           ; see note in function header
     movwf   pwmCheckSum
 
-    movlw   pwmDutyCycleHiByte          ; address in RAM
+    movlw   high pwmDutyCycleHiByte     ; address in RAM
+    movwf   FSR0H
+    movlw   low pwmDutyCycleHiByte      ; address in RAM
     movwf   FSR0L
+  
     clrf    eepromAddressH
     movlw   eePWMDutyCycleHiByte        ; address in EEprom
     movwf   eepromAddressL
@@ -2315,8 +2337,6 @@ skipDEMM7:
 	goto	LoopDEMM1
 
 exitDEMM7:
-    
-    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
     
     return    
 
@@ -3474,14 +3494,18 @@ updateAS:
     btfsc   flags,WALL_MODE ; Notch or Wall mode?
     goto    wallModeAS
 
-    movlw   sparkLevelNotch ; transfer value to Notch variable
+    movlw   high sparkLevelNotch ; transfer value to Notch variable
+    movwf   FSR0H
+    movlw   low sparkLevelNotch
     movwf   FSR0L
 
     goto    processValueAS
 
 wallModeAS:
 
-    movlw   sparkLevelWall  ; transfer value to Notch variable
+    movlw   high sparkLevelWall  ; transfer value to Notch variable
+    movwf   FSR0H
+    movlw   low sparkLevelWall
     movwf   FSR0L
 
 processValueAS:
@@ -4784,20 +4808,33 @@ L13:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; isPosGtYQ
+; isDepthGtYQ
 ;
-; Compares head position value with YQ, a four byte value.  The position value can be negative but
-; the YQ value must always be positive.
+; Compares five digits of current depth value with YQ, any five byte value.  The depth value can be
+; negative but the YQ value must always be positive.
+;
+;   The bytes in depth compared are:
+;       EEEEEnnnnnn
+;   where n represents ignored digits while E represents digits to be compared.
+;
+; For comparing depth and target, only xx.xxx digits are necessary. The lowest digits are required
+; to achieve accuracy, but for checking to see if target reached, only the five digits are needed.
+;
+; Typically, YQ should be the same five digits in the value to be compared (such as target, in
+; which case YQ would point to target10).
 ;
 ; On entry:
 ;
-; W = address of YQ, value to compare position with. 
+; FSR0 = address of YQ, value to compare depth with.
 ;
-; Returns C = 1 if Pos >= YQ.
-;
-; Uses W, FSR0
+; Returns C = 1 if Depth >= YQ.
 ;
 
+; //wip hss --  redo this function
+; change so that FSR0 points to YQ (target10) on entry -- W no longer needed on entry
+; change to compare 5 digits instead of 4  
+; clear target value (all 11 digits) before loading from eeprom    
+    
 isPosGtYQ:
 
     movwf   FSR0L           ; point FSR to YQ
@@ -4825,6 +4862,8 @@ isPosGtYQ:
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
 
+; wip hss -- add code to check for depth6    
+    
     bcf     STATUS,C        ; preload for less than
     movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
     btfss   STATUS,Z        
@@ -5048,7 +5087,11 @@ addBCDVars:
 
     decf    WREG,F          ; adjust for use to move to digit 0
     addwf   FSR0L,F         ; point to digit 0 of operand 1
+    btfsc   STATUS,C
+    incf    FSR0H,F
     addwf   FSR1L,F         ; point to digit 0 of operand 2
+    btfsc   STATUS,C
+    incf    FSR1H,F
 
     bcf     STATUS,C        ; clear the carry bit for the first addition
 
@@ -5092,17 +5135,22 @@ aB6BV1:
 ; FSR0 points to MSB of operand1/destination variable
 ; FSR1 points to MSB of operand2/variable
 ; destination(operand1) = operand1 - operand2
+;
 
 subtractBCDVars:
 
     banksel scratch1
 
     movwf   scratch1        ; use scratch variable as loop counter
-
+    
     decf    WREG,F          ; adjust for use to move to digit 0
     addwf   FSR0L,F         ; point to digit 0 of operand 1
+    btfsc   STATUS,C
+    incf    FSR0H,F
     addwf   FSR1L,F         ; point to digit 0 of operand 2
-
+    btfsc   STATUS,C
+    incf    FSR1H,F
+ 
     bsf     STATUS,C        ; set the carry/borrow bit for the first subtraction (no borrow)
 
 sB6BV1Loop1:
@@ -5503,7 +5551,7 @@ writeByteLCD:
 
     banksel LCDScratch0
 
-    movwf   LCDScratch0     ; store character
+    movwf   LCDScratch0         ; store character
 
     movf    LCDBufferPtrH,W     ; get pointer to next buffer position
     movwf   FSR0H
@@ -6066,7 +6114,7 @@ applyASCIINumDigitLimits:
 
 applyBCDDigitLimits:
 
-    movlw   high scratchc0               ; point FSR0 at the high limit
+    movlw   high scratchc0               ; point at the high limit
     movwf   FSR1H
     movlw   low scratchc0
     movwf   FSR1L
@@ -6262,7 +6310,7 @@ dF1Loop:
 ; Strings in Program Memory
 ;
     
-string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','h',0x00
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','i',0x00
 string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
 string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
 string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
