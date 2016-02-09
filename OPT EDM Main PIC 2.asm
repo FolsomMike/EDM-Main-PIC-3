@@ -3013,9 +3013,10 @@ displayCN:
 
 checkPositionCN:
 
-    banksel depth3
-
-    movlw   depth3
+    movlw   high target10   ; Check to see if depth >= target 
+    movwf   FSR0H
+    movlw   low target10
+    movwf   FSR0L
     call    isPosGtYQ
 
     bcf     flags,AT_DEPTH
@@ -4822,44 +4823,41 @@ L13:
 ;
 ; On entry:
 ;
-; FSR0 = address of YQ, value to compare depth with.
+;   FSR0 = address of YQ, value to compare depth with.
 ;
 ; Returns C = 1 if Depth >= YQ.
-;
+;   
 
-; //wip hss --  redo this function
-; change so that FSR0 points to YQ (target10) on entry -- W no longer needed on entry
-; change to compare 5 digits instead of 4  
-; clear target value (all 11 digits) before loading from eeprom    
-    
 isPosGtYQ:
-
-    movwf   FSR0L           ; point FSR to YQ
 
     movf    INDF0,W         ; compare most sig digits
     subwf   depth10,W
     btfss   STATUS,C        ; if no borrow, position3 is larger or equal
     return
     
-    incf    FSR0L,F         ; compare next digit
+    addfsr  FSR0,.1         ; compare next digit
     movf    INDF0,W
     subwf   depth9,W
     btfss   STATUS,C        ; if no borrow, position2 is larger or equal
     return
 
-    incf    FSR0L,F         ; compare next digit
+    addfsr  FSR0,.1         ; compare next digit
     movf    INDF0,W
     subwf   depth8,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
         
-    incf    FSR0L,F         ; compare next digit
+    addfsr  FSR0,.1         ; compare next digit
     movf    INDF0,W
     subwf   depth7,W
     btfss   STATUS,C        ; if no borrow, position1 is larger or equal
     return
-
-; wip hss -- add code to check for depth6    
+    
+    addfsr  FSR0,.1         ; compare next digit
+    movf    INDF0,W
+    subwf   depth6,W
+    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
+    return
     
     bcf     STATUS,C        ; preload for less than
     movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
