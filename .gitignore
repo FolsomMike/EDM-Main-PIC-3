@@ -1,5 +1,29 @@
+# Helpful Git notes:
+#
+# In Git Bash, use "git config core.autocrlf false" to avoid unwanted changes, especially to Java source files.
+# You must do this for each project.
+#
+
+#
+# Two important files for the PIC IDE are not tracked:
+#	nbproject/project.xml
+#	nbproject/configurations.xml
+#
+# When a new user clones the project, the above files must be transferred outside of git.
+#
+
+OPT EDM Main PIC 2.X/build
+
 archive/
 Distributions/
+OPT EDM Main PIC 2.X/build/default/production/
+OPT EDM Main PIC 2.X/nbproject/Makefile-default.mk
+OPT EDM Main PIC 2.X/nbproject/Makefile-genesis.properties
+OPT EDM Main PIC 2.X/nbproject/Makefile-local-default.mk
+OPT EDM Main PIC 2.X/nbproject/configurations.xml
+OPT EDM Main PIC 2.X/nbproject/private/configurations.xml
+OPT EDM Main PIC 2.X/nbproject/private/private.xml
+OPT EDM Main PIC 2.X/nbproject/project.xml
 *.mch
 *.MCH
 *.o
@@ -20,5 +44,3 @@ Distributions/
 *.MCS
 *.mcw
 *.MCW
-OPT EDM Main PIC 2.X/build
-OPT EDM Main PIC 2.X/*.fil
