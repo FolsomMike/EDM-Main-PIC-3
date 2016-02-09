@@ -4080,6 +4080,9 @@ isPosGtYQ:
 ;
 ; Increments the signed unpacked BCD depth position variable by one step distance.
 ;
+; If depth is negative, the condition depth + step <= 0 must always be true in order for the code to
+; work. This means that the step value can NEVER change during operation.
+;
 ; On entry:
 ;
 ; Bank should point to flags.
@@ -4127,6 +4130,9 @@ negativeIBV:
 ; decDepth
 ;
 ; Decrements the signed unpacked BCD depth position variable by one step distance.
+;
+; If depth is positive, the condition depth - step >= 0 must always be true in order for the code to
+; work. This means that the step value can NEVER change during operation.
 ;
 ; On entry:
 ;
