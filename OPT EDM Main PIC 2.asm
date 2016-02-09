@@ -4653,9 +4653,6 @@ displaySpeedAndPower:
 
 SetBank0ClrWDT:
 
-    clrf   FSR0H            ;high byte of indirect addressing pointers -> 0
-    clrf   FSR1H
-
     banksel flags
 
     clrwdt                  ;keep watchdog from triggering
