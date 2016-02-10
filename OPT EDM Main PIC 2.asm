@@ -2217,15 +2217,10 @@ displayCN:
 
 checkPositionCN:
 
-    movlw   high target10   ; Check to see if depth >= target 
-    movwf   FSR0H
-    movlw   low target10
-    movwf   FSR0L
-    call    isPosGtYQ
-
+    call    isDepthGreaterThanTarget ; Check to see if depth >= target 
     bcf     flags,AT_DEPTH
     btfsc   STATUS,C
-    bsf     flags,AT_DEPTH  ; if isPosGTYP returned C=1, depth reached so set flag
+    bsf     flags,AT_DEPTH  ; if isDepthGreaterThanTarget returned C=1, depth reached so set flag
 
     return
 
@@ -4010,71 +4005,64 @@ L13:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; isDepthGtYQ
+; isDepthGreaterThanTarget
 ;
-; Compares five digits of current depth value with YQ, any five byte value.  The depth value can be
-; negative but the YQ value must always be positive.
+; Compares the top five most significant digits of the current depth against the top five most
+; significant digits of the target depth. Note that the depth value can be negative, but the target
+; must always be positive.
 ;
-;   The bytes in depth compared are:
-;       EEEEEnnnnnn
-;   where n represents ignored digits while E represents digits to be compared.
+; The bytes in depth and target compared are:
+;   EEEEEnnnnnn
+; where n represents ignored digits while E represents digits to be compared.
 ;
 ; For comparing depth and target, only xx.xxx digits are necessary. The lowest digits are required
-; to achieve accuracy, but for checking to see if target reached, only the five digits are needed.
+; to achieve accuracy while tracking the position of the head, but for checking to see if target 
+; reached, only the five digits are needed.
 ;
-; Typically, YQ should be the same five digits in the value to be compared (such as target, in
-; which case YQ would point to target10).
+; ON ENTRY:
+;   no requirements
 ;
-; On entry:
-;
-;   FSR0 = address of YQ, value to compare depth with.
-;
-; Returns C = 1 if Depth >= YQ.
+; ON EXIT:
+;   C = 0 if Depth <= Target 
+;   C = 1 if Depth >  Target
 ;   
 
-isPosGtYQ:
-
-    movf    INDF0,W         ; compare most sig digits
-    subwf   depth10,W
-    btfss   STATUS,C        ; if no borrow, position3 is larger or equal
-    return
+isDepthGreaterThanTarget:
     
-    addfsr  FSR0,.1         ; compare next digit
-    movf    INDF0,W
-    subwf   depth9,W
-    btfss   STATUS,C        ; if no borrow, position2 is larger or equal
-    return
-
-    addfsr  FSR0,.1         ; compare next digit
-    movf    INDF0,W
-    subwf   depth8,W
-    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
-    return
-        
-    addfsr  FSR0,.1         ; compare next digit
-    movf    INDF0,W
-    subwf   depth7,W
-    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
-    return
+    bcf     STATUS,C        ; clear for operations below
     
-    addfsr  FSR0,.1         ; compare next digit
-    movf    INDF0,W
-    subwf   depth6,W
-    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
-    return
+    banksel depth10         ; target and depth should always be in the same bank
     
-    bcf     STATUS,C        ; preload for less than
     movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
-    btfss   STATUS,Z        
-    return                  ; if Z flag set, sign is negative, return with C bit cleared
-                            ; (position < YQ)
+    btfss   STATUS,Z        ; if set, depth < target because depth sign is negative
+        return              ; return C=0 because depth < target
 
-    bsf     STATUS,C        ; all digits of position are >= all digits of YQ and position is
-                            ; positive: return with C = 1
-
-    return
+    movf    depth10,W      ; compare next least significant digits
+    subwf   target10,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
     
-; end of isPosGtYQ
+    movf    depth9,W       ; compare next least significant digits
+    subwf   target9,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth8,W       ; compare next least significant digits
+    subwf   target8,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth7,W       ; compare next least significant digits
+    subwf   target7,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth6,W       ; compare next least significant digits
+    subwf   target6,W
+    
+    return                  ; return C=1 or C=0 depending on the results of the last operation
+    
+; end of isDepthGreaterThanTarget
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
