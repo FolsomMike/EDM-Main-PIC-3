@@ -1444,6 +1444,11 @@ LoopDEMM1:
 
     movf    menuOption,W       
     movwf   scratch0
+    
+    movlw   high step10         ; destination variable for step
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
 
     decfsz  scratch0,F
     goto    skipDEMM6
@@ -1453,11 +1458,6 @@ LoopDEMM1:
     bcf     flags,EXTENDED_MODE ; set flag to 0
     
     ; copy value for the standard tool to the inches/motor step variable
-
-    movlw   high step10         ; destination variable
-    movwf   FSR1H
-    movlw   low step10
-    movwf   FSR1L
 
     btfsc   flags2,EROSION_MODE
     goto    useStdErosionFactor
