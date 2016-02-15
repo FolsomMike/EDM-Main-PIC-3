@@ -21,6 +21,7 @@
 ; There are two PIC controllers on the board -- the Main PIC and the LCD PIC.  This code is
 ; for the Main PIC.  The Main PIC sends data to the LCD PIC via a serial data line for display
 ; on the LCD.
+;
 ; 
 ;--------------------------------------------------------------------------------------------------
 ; Notes on PCLATH
@@ -839,59 +840,14 @@ BLINK_ON_FLAG			EQU		0x01
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; Constants in Program Memory
-;
-; Step Ratio Constants:
-;
-; Specifies the blade travel distance per motor step for different types of cutting heads.
-;
-; These are unpacked BCD decimal values, each digit can be 0-9.
-; The decimal point is two digits from the left for all depth related values.
-;
-; Standard Reach Tool Ratio
-;
-; One motor step is 0.000217391"
-; typically, blade erosion is 17%
-;
-; For 1:1 (no erosion factor), use .000217391
-; For 17% erosion factior use .000217391 * .83 = 0.000180435
-;
-; Extended Reach Tool Ratio
-;
-; One motor step is .000023774"
-; typically, blade erosion is 17%
-;
-; For 1:1 (no erosion factor), use .000023774
-; For 17% erosion factior use .000023774 * .83 = 0.000019732
-;
-; Unpacked BCD is used for inch/pulse depth related values as it allows for the fastest math during
-; operation. The decimal point is two digits from the left for all depth related values.
-;
-; NOTE: program memory is only 14 bits wide. Using dw rather than db forces each value to fill
-; an entire 14 bit word rather than being packed two values to a word.
-;
-; 00.000217391 -> standard tool with no erosion factor ~ inches/motor pulse
-stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1     ; unpacked BCD ~ xx.xxxxxxxxx
-
-; 00.000180435 -> standard tool with 17% erosion factor ~ inches/motor pulse
-std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5     ; unpacked BCD ~ xx.xxxxxxxxx
-
-; 00.000023774 -> extended tool with no erosion factor ~ inches/motor pulse
-extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4     ; unpacked BCD ~ xx.xxxxxxxxx
-
-; 00.000019732 -> extended tool with 17% erosion factor ~ inches/motor pulse
-ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2     ; unpacked BCD ~ xx.xxxxxxxxx
-
-; end of Constants in Program Memory
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; start
 ;
 
 start:
 
-    call    setup           ; preset variables and configure hardware
+    movlp   high setup      ; preset variables and configure hardware
+    call    setup           
+    movlp   high start
 
 menuLoop:
 
@@ -902,526 +858,6 @@ menuLoop:
     goto    menuLoop
     
 ; end of start
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setup
-;
-; Presets variables and configures hardware.
-;
-; NOTE: The system does not use the internal comparators even though it appears there are analog
-; inputs to some of the comparator pins.  Those inputs are the output of external op-amps
-; acting as comparators - their outputs are read as digital inputs on RA3 and RA4
-;
-
-setup:
-
-    clrf    INTCON          ; disable all interrupts
-
-    call    setupClock      ; set system clock source and frequency
-
-    call    setupPortA      ; prepare Port A for I/O
-
-    call    setupPortB      ; prepare Port B for I/O
-
-    call    setupPortC      ; prepare Port C  for I/O
-
-    call    initializeOutputs
-
-    call    setupI2CMaster7BitMode ; prepare the I2C serial bus for use
-
-    call    initHighLowCurrentLimitPotValues
-
-    call    setDigitalPots  ; set digital pot values to stored values
-
-;start of hardware configuration
-
-    banksel OPTION_REG
-    movlw   0x58
-    movwf   OPTION_REG      ; Option Register = 0x58   0101 1000 b
-                            ; bit 7 = 0 : weak pull-ups are enabled by individual port latch values
-                            ; bit 6 = 1 : interrupt on rising edge
-                            ; bit 5 = 0 : TOCS ~ Timer 0 run by internal instruction cycle clock (CLKOUT ~ Fosc/4)
-                            ; bit 4 = 1 : TOSE ~ Timer 0 increment on high-to-low transition on RA4/T0CKI/CMP2 pin (not used here)
-							; bit 3 = 1 : PSA ~ Prescaler disabled; Timer0 will be 1:1 with Fosc/4
-                            ; bit 2 = 0 : Bits 2:0 control prescaler:
-                            ; bit 1 = 0 :    000 = 1:2 scaling for Timer0
-                            ; bit 0 = 0 :
-    
-;end of hardware configuration
-
-    banksel flags
-
-    call    reallyBigDelay
-    
-    call    zeroDepth       ; clear the depth position variable
-
-    clrf    buttonState     ; zero various variables
-
-    call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
-
-    ; reset some values to a default state
-    ; leave WALL_MODE as read from eeprom - this state is saved
-	; leave MOTOR_DIR_MODE as read from eeprom - this state is saved
-
-    bcf     flags,EXTENDED_MODE
-    bcf     flags,CUT_STARTED
-    bcf     flags,AT_DEPTH
-    bcf     flags,DATA_MODIFIED
-    bcf     flags,UPDATE_DISPLAY
-
-    call    readSparkLevelsFromEEprom
-
-    ; set sparkLevel to value loaded for Notch or Wall mode depending on current mode
-
-    movf    sparkLevelNotch,W   ; use Notch mode value if in Wall Reduction mode
-    btfsc   flags,WALL_MODE
-    movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
-    movwf   sparkLevel          ; save the selected value
-
-    call    readTargetValueFromEEprom    ; read the value stored for depth from the EEProm
-
-    call    readPWMValsFrmEEpromSendLEDPIC
-
-    ; set up the LCD buffer variables
-
-    banksel LCDFlags
-
-    clrf    LCDFlags        
-    movlw   high LCDBuffer0
-    movwf   LCDBufferPtrH
-    movlw   low LCDBuffer0
-    movwf   LCDBufferPtrL
-
-    clrf    LCDBufferCnt    ; no characters in the buffer
-	
-; enable the interrupts
-
-	bsf	    INTCON,PEIE	    ; enable peripheral interrupts (Timer0 is a peripheral)
-    bsf     INTCON,T0IE     ; enable TMR0 interrupts
-    bsf     INTCON,GIE      ; enable all interrupts
-
-    banksel MOTOR_ENABLE_P
-    bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
-
-    call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
-
-    call    setLEDArrays    ; set the on/off states for the LED arrays
-
-    call    sendLEDPICStart ; command the LED PIC to display Current/Voltage on LED arrays
-
-    return
-
-; end of setup
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; initializeOutputs
-;
-; Initializes all outputs to known values.
-;
-; Write to port latches to avoid problems with read-modify-write when changing multiple outputs
-; in quick succession.
-;
-
-initializeOutputs:
-
-    banksel LATB
-    bsf     LATB,SERIAL_OUT
-
-    banksel LATA
-    bcf     LATA, POWER_ON
-
-    banksel LATC
-    bsf     LATC, MOTOR_STEP
-
-    banksel LATC
-    bsf     LATC, MOTOR_DIR
-
-    banksel LATC              ; disable the motor
-    bsf     LATC, MOTOR_ENABLE
-
-    banksel LATC
-	bcf     LATC, MOTOR_MODE    ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
-                                        ; see notes at top of page for more info
-
-    return
-
-; end of initializeOutpus
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setupClock
-;
-; Sets up the system clock source and frequency.
-;
-; Assumes clock related configuration bits are set as follows:
-;
-;   _FOSC_INTOSC,  _CPUDIV_NOCLKDIV, _PLLMULT_4x, _PLLEN_DISABLED
-;
-; Assumes all programmable clock related options are at Reset default values.
-;
-; NOTE: Adjust I2C baud rate generator value when Fosc is changed.
-;
-
-setupClock:
-
-    ; choose internal clock frequency of 16 Mhz
-
-    banksel OSCCON
-
-    bsf     OSCCON, IRCF0
-    bsf     OSCCON, IRCF1
-    bsf     OSCCON, IRCF2
-    bsf     OSCCON, IRCF3
-
-    return
-
-; end of setupClock
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setupPortA
-;
-; Sets up Port A for I/O operation.
-;
-; NOTE: Writing to PORTA is same as writing to LATA for PIC16f1459. The code example from the
-; data manual writes to both -- probably to be compatible with other PIC chips.
-;
-; NOTE: RA0, RA1 and RA3 can only be inputs on the PIC16f1459 device. 
-;       RA2, RA6, RA7 are not implemented.
-;
-
-setupPortA:
-
-    banksel WPUA
-    movlw   b'00000000'                 ; disable weak pull-ups
-    movwf   WPUA
-
-    banksel PORTA
-    clrf    PORTA                       ; init port value
-
-    banksel LATA                        ; init port data latch
-    clrf    LATA
-
-    banksel ANSELA
-    clrf    ANSELA                      ; setup port for all digital I/O
-
-    ; set I/O directions
-
-    banksel TRISA
-    movlw   b'11111111'                 ; first set all to inputs
-    movwf   TRISA
-
-    ; set direction for each pin used
-
-    bsf     TRISA, SERIAL_IN            ; input
-    bsf     TRISA, SHORT_DETECT         ; input
-    bsf     TRISA, HI_LIMIT             ; input
-    bcf     TRISA, POWER_ON             ; output
-
-    return
-
-; end of setupPortA
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setupPortB
-;
-; Sets up Port B for I/O operation.
-;
-; NOTE: Writing to PORTB is same as writing to LATB for PIC16f1459. The code example from the
-; data manual writes to both -- probably to be compatible with other PIC chips.
-;
-; NOTE: RB0, RB1, RB2, RB3 are not implemented on the PIC16f1459 device.
-;
-
-setupPortB:
-
-    banksel WPUB
-    movlw   b'00000000'                 ; disable weak pull-ups
-    movwf   WPUB
-
-    banksel PORTB
-    clrf    PORTB                       ; init port value
-
-    banksel LATB                        ; init port data latch
-    clrf    LATB
-
-    bsf     LATB,SERIAL_OUT             ; initialize SERIAL_OUT high before changing pin to output
-                                        ; so a start bit won't be transmitted
-    banksel ANSELB
-    clrf    ANSELB                      ; setup port for all digital I/O
-
-    ; set I/O directions
-
-    banksel TRISB
-    movlw   b'11111111'                 ; first set all to inputs
-    movwf   TRISB
-
-    bsf     TRISB, JOG_DWN_SW           ; input
-    bcf     TRISB, SERIAL_OUT           ; output
-
-    return
-
-; end of setupPortB
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setupPortC
-;
-; Sets up Port C for I/O operation.
-;
-; NOTE: Writing to PORTC is same as writing to LATC for PIC16f1459. The code example from the
-; data manual writes to both -- probably to be compatible with other PIC chips.
-;
-
-setupPortC:
-
-    ; Port C does not have a weak pull-up register
-
-    banksel PORTC
-    clrf    PORTC                       ; init port value
-
-    banksel LATC                        ; init port data latch
-    clrf    LATC
-
-    banksel ANSELC
-    clrf    ANSELC                      ; setup port for all digital I/O
-
-    ; set I/O directions
-
-    banksel TRISC
-    movlw   b'11111111'                 ; first set all to inputs
-    movwf   TRISC
-
-    bcf     TRISC, MOTOR_ENABLE         ; output
-    bsf     TRISC, MODE_SW              ; input
-    bsf     TRISC, JOG_UP_SW            ; input
-    bcf     TRISC, MOTOR_DIR            ; output
-    bcf     TRISC, MOTOR_STEP           ; output
-    bsf     TRISC, LO_LIMIT             ; input
-    bcf     TRISC, MOTOR_MODE           ; output
-    bsf     TRISC, SELECT_SW            ; input
-
-    return
-
-; end of setupPortC
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; readPWMValsFrmEEpromSendLEDPIC
-;
-; Reads the Pulse Width Module (PWM) values for the Cutting Current pulse controller and
-; transmits the values to the LED PIC which handles that function via the I2C bus.
-;
-; If the values have never previously been saved to the eeprom, the checksum validation should
-; fail and default values will be used.
-;
-
-readPWMValsFrmEEpromSendLEDPIC:
-
-    call    readPWMValuesFromEEprom
-
-    call    sendPWMValuesToLEDPIC
-
-    return
-
-; end of readPWMValsFrmEEpromSendLEDPIC
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; sendPWMValuesToLEDPIC
-;
-; Sends the PWM values to the LED PIC.
-;
-
-sendPWMValuesToLEDPIC:
-
-    banksel scratch0
-    movlw   .6                      ; send command byte and two values
-    movwf   scratch0
-
-    movlw   LEDPIC_SET_PWM         ; precede values with command byte
-    banksel pwmSetCommandByte
-    movwf   pwmSetCommandByte
-
-    movlw   high pwmSetCommandByte       ; point to first byte to be sent
-    movwf   FSR0H
-    movlw   low pwmSetCommandByte
-    movwf   FSR0L
-
-    call    sendBytesToLEDPICViaI2C
-
-    return
-
-; end of sendPWMValuesToLEDPIC
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setLEDArrays
-;
-; Sets LED arrays to known on/off states.
-;
-
-setLEDArrays:
-
-    banksel scratch2
-
-    movlw   0x00            ; value for red LED array
-    comf    WREG,W          ; invert the value -- a zero turns an LED on
-    movwf   scratch2
-    movlw   0x00            ; value for green LED array
-    comf    WREG,W          ; invert the value -- a zero turns an LED on
-    movwf   scratch3
-
-    call    sendLEDArrayValues
-
-    return
-
-; end of setLEDArrays
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setLEDArrays2
-;
-; Sets LED arrays to known on/off states.
-;
-
-setLEDArrays2:
-
-    banksel scratch2
-
-    movlw   0x00            ; value for red LED array
-;    comf    WREG,W          ; invert the value -- a zero turns an LED on
-    movwf   scratch2
-    movlw   0x55            ; value for green LED array
-;    comf    WREG,W          ; invert the value -- a zero turns an LED on
-    movwf   scratch3
-
-    call    sendLEDArrayValues
-
-    return
-
-; end of setLEDArrays2
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; sendLEDArrayValues
-;
-; Sends values to LED PIC to set on/off state of the LED arrays.
-;
-; Value for the red LED array should be in scratch2.
-; Value for the red LED array should be in scratch3.
-;
-
-sendLEDArrayValues:
-
-    banksel scratch0
-
-    movlw   .3                      ; send command byte and two values
-    movwf   scratch0
-    movlw   LEDPIC_SET_LEDS         ; put command byte in scratch1
-    movwf   scratch1
-
-    movlw   high scratch1           ; point to first byte to be sent
-    movwf   FSR0H
-    movlw   low scratch1
-    movwf   FSR0L
-
-    call    sendBytesToLEDPICViaI2C
-
-    return
-
-; end of sendLEDArrayValues
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; sendLEDPICStart
-;
-; Sends start command to LED PIC to initiate displaying the Current and Voltage monitor voltages
-; on the LED arrays.
-;
-
-sendLEDPICStart:
-
-    banksel scratch0
-
-    movlw   .1                      ; send command byte
-    movwf   scratch0
-    movlw   LEDPIC_START            ; put command byte in scratch1
-    movwf   scratch1
-    
-    movlw   high scratch1           ; point to first byte to be sent
-    movwf   FSR0H
-    movlw   low scratch1
-    movwf   FSR0L
-
-    call    sendBytesToLEDPICViaI2C
-
-    return
-
-; end of sendLEDPICStart
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; initHighLowCurrentLimitPotValues
-;
-; Sets the high and low current comparator digital pot variables to default settings.
-;
-; Sets the Power Level value to "2" for the default settings.
-;
-; Does not send the values to the digital pots.
-;
-
-initHighLowCurrentLimitPotValues:
-
-    movlw   HI_CURRENT_LIMIT_POT
-    banksel hiCurrentLimitPot
-    movwf   hiCurrentLimitPot
-
-    movlw   LO_CURRENT_LIMIT_POT
-    banksel loCurrentLimitPot
-    movwf   loCurrentLimitPot
-
-    movlw   .2                  ; default power level for the default pot settings is 2
-    banksel powerLevel
-    movwf   powerLevel
-
-    return
-
-; end of initHighLowCurrentLimitPotValues
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; setDigitalPots
-;
-; Sets the digital pot values to their stored settings.
-;
-
-setDigitalPots:
-
-    call    setHighCurrentLimitDigitalPot
-
-    call    setLowCurrentLimitDigitalPot
-
-    banksel scratch0
-    movlw   VOLTAGE_MONITOR_POT_ADDR
-    movwf   scratch0
-    movlw   VOLTAGE_MONITOR_POT
-    movwf   scratch1
-    call    setDigitalPotInChip1
-
-    banksel scratch0
-    movlw   CURRENT_MONITOR_POT_ADDR
-    movwf   scratch0
-    movlw   CURRENT_MONITOR_POT
-    movwf   scratch1
-    call    setDigitalPotInChip1
-
-    return
-
-; end of setDigitalPots
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1467,58 +903,6 @@ setLowCurrentLimitDigitalPot:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; readTargetValueFromEEprom
-;
-; Reads the user set target depth value from eeprom. These are unpacked BCD digits.
-;
-; Each digit is checked for valid range of 0-9 and forced to that range.
-;
-; Note: these variables must be kept contiguous in memory and eeprom.
-;
-
-readTargetValueFromEEprom:
-
-    movlw   high target9
-    movwf   FSR0H
-    movlw   low target9      ; address in RAM
-    movwf   FSR0L
-    
-    banksel eepromAddressH
-    clrf    eepromAddressH
-    movlw   eeTarget3        ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .4
-    movwf   eepromCount     ; read 4 bytes
-    call    readFromEEprom
-
-    ; check each digit for illegal BCD value (0-9)
-    banksel target9
-    movf    target9,W
-    movwf   scratchc2
-    call    applyBCDDigitLimits
-    movwf   target9
-
-    movf    target8,W
-    movwf   scratchc2
-    call    applyBCDDigitLimits
-    movwf   target8
-
-    movf    target7,W
-    movwf   scratchc2
-    call    applyBCDDigitLimits
-    movwf   target7
-
-    movf    target6,W
-    movwf   scratchc2
-    call    applyBCDDigitLimits
-    movwf   target6
-
-    return
-
-; end of readTargetValueFromEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; saveDepthValueToEEprom
 ;
 ; Saves the user set cut depth value from eeprom. These are BCD digits.
@@ -1545,59 +929,6 @@ saveDepthValueToEEprom:
     return
 
 ; end of saveDepthValueToEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; readSparkLevelsFromEEprom
-;
-; Reads the spark Wall/Notch aggression/speed values from eeprom.
-;
-; Note: these variables must be kept contiguous in memory and eeprom.
-;
-
-readSparkLevelsFromEEprom:
-
-    banksel sparkLevelNotch
-
-    movlw   high sparkLevelNotch    ; address in RAM
-    movwf   FSR0H
-    movlw   low sparkLevelNotch
-    movwf   FSR0L
-
-    clrf    eepromAddressH
-    movlw   eeSparkLevelNotch   ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount         ; read 2 bytes
-    call    readFromEEprom
-
-    ; apply limits to the values to prevent illegal values read from eeprom
-
-    banksel scratch0
-
-    movlw   high scratch0               ; point FSR0 at the high limit
-    movwf   FSR1H
-    movlw   low scratch0
-    movwf   FSR1L
-
-    movlw   0x81                        ; upper limit
-    movwf   scratch0
-    movlw   0x01                        ; lower limit
-    movwf   scratch1
-
-    movf    sparkLevelNotch,W           ; limit notch spark level value
-    movwf   scratch2
-    call    applyLimitsToByteValue
-    movwf   sparkLevelNotch             ; update variable with clipped value
-
-    movf    sparkLevelWall,W            ; limit wall spark level value
-    movwf   scratch2
-    call    applyLimitsToByteValue
-    movwf   sparkLevelWall              ; update variable with clipped value
-    
-    return
-
-; end of readSparkLevelsFromEEprom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1629,33 +960,6 @@ saveSparkLevelsToEEprom:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; readFlagsFromEEprom
-;
-; Reads the flags and flags2 values from eeprom.
-;
-
-readFlagsFromEEprom:
-
-    banksel flags
-    
-    movlw   high flags      ; address in RAM
-    movwf   FSR0H
-    movlw   low flags
-    movwf   FSR0L
-        
-    clrf    eepromAddressH
-    movlw   eeFlags         ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount     ; read 2 bytes
-    call    readFromEEprom
-
-    return
-
-; end of readFlagsFromEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; saveFlagsToEEprom
 ;
 ; Saves the flags and flags2 values to eeprom.
@@ -1680,86 +984,6 @@ saveFlagsToEEprom:
     return
 
 ; end of saveFlagsToEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; readPWMValuesFromEEprom
-;
-; Reads PWM module time period and duty cycle and output polarity values from the eeprom.
-;
-; These values are sent to the LED PIC to specify the period and duty cycle of the pulse
-; controlling the on/off times of the cutting current.
-;
-; The least significant bit of the polarity value is used to set the PWM output polarity.
-;
-; Before saving, the bytes are added together to create a checksum which is also stored in the
-; eeprom. This allows the reading function to verify that the values are valid and also that the
-; eeprom was not empty and the values had never been stored.
-;
-; The value of 1 is added to the checksum...(see note in the header for function
-;   savePWMValuesToEEprom for details).
-;
-; Upon reading, if the checksum is invalid then safe default PWM values are used instead.
-;
-; NOTE: Improper PWM values can destroy the MOSFETs.
-;
-
-readPWMValuesFromEEprom:
-
-    banksel pwmDutyCycleHiByte
-
-    movlw   high pwmDutyCycleHiByte      ; address in RAM
-    movwf   FSR0H
-    movlw   low pwmDutyCycleHiByte
-    movwf   FSR0L
-        
-    clrf    eepromAddressH
-    movlw   eePWMDutyCycleHiByte         ; address in EEprom
-    movwf   eepromAddressL
-    movlw   .5
-    movwf   eepromCount                  ; read 4 bytes
-    call    readFromEEprom
-
-    banksel pwmDutyCycleHiByte
-
-    clrw                                ; calculate the checksum for all PWM values
-    addwf   pwmDutyCycleHiByte,W
-    addwf   pwmDutyCycleLoByte,W
-    addwf   pwmPeriod,W
-    addwf   pwmPolarity,W
-    addlw   1                           ; see note in function header
-
-    subwf   pwmCheckSum,W               ; compare calculated checksum with that read from eeprom
-    btfsc   STATUS,Z
-    goto    pwmValuesReadAreValid       ; zero flag set, checksum matched, skip
-
-    ; checksum read did not match calculated checksum, so use default values
-
-    movlw   PWM_DUTY_CYCLE_HI_BYTE_DEFAULT
-    movwf   pwmDutyCycleHiByte
-
-    movlw   PWM_DUTY_CYCLE_LO_BYTE_DEFAULT
-    movwf   pwmDutyCycleLoByte
-
-    movlw   PWM_PERIOD_DEFAULT
-    movwf   pwmPeriod
-
-    movlw   PWM_POLARITY_DEFAULT
-    movwf   pwmPolarity
-
-    clrw                                ; calculate the checksum for all PWM values
-    addwf   pwmDutyCycleHiByte,W
-    addwf   pwmDutyCycleLoByte,W
-    addwf   pwmPeriod,W
-    addwf   pwmPolarity,W
-    addlw   1                           ; see note in function header
-    movwf   pwmCheckSum
-
-pwmValuesReadAreValid:
-
-    return
-
-; end of readPWMValuesFromEEprom
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1811,27 +1035,6 @@ savePWMValuesToEEprom:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; resetLCD
-;
-; Resets the LCD screen.
-;
-
-resetLCD:
-
-    movlw   CLEAR_SCREEN_CMD
-    call    writeControl    ; send Clear Display control code to the LCD
-
-    movlw   0x80
-    call    writeControl    ; position at line 1 column 1
-
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
-
-    return
-    
-; end of resetLCD
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; handleInterrupt
 ;
 ; All interrupts call this function.  The interrupt flags must be polled to determine which
@@ -1874,8 +1077,6 @@ endISR:
 ; NOTE NOTE NOTE
 ; It is important to use no (or very few) subroutine calls.  The stack is only 8 deep and
 ; it is very bad for the interrupt routine to use it.
-;
-; TMR0 is never reloaded -- thus it wraps around and does a full count for each interrupt.
 ;
 
 handleTimer0Interrupt:
@@ -2243,6 +1444,11 @@ LoopDEMM1:
 
     movf    menuOption,W       
     movwf   scratch0
+    
+    movlw   high step10         ; destination variable for step
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
 
     decfsz  scratch0,F
     goto    skipDEMM6
@@ -2252,11 +1458,6 @@ LoopDEMM1:
     bcf     flags,EXTENDED_MODE ; set flag to 0
     
     ; copy value for the standard tool to the inches/motor step variable
-
-    movlw   high step10         ; destination variable
-    movwf   FSR1H
-    movlw   low step10
-    movwf   FSR1L
 
     btfsc   flags2,EROSION_MODE
     goto    useStdErosionFactor
@@ -2277,7 +1478,7 @@ useStdErosionFactor:
 
 copyStdStepValue:
 
-    movlw   .11                 ; number of bytes
+    movlw   .12                 ; number of bytes
     call    copyBytes
     
     ; standard head mode values
@@ -2319,7 +1520,7 @@ useExtErosionFactor:
 
 copyExtStepValue:
 
-    movlw   .11                 ; number of bytes
+    movlw   .12                 ; number of bytes
     call    copyBytes
 
     ; extended head values
@@ -2744,12 +1945,14 @@ skipDMMP24:
 	goto	skipDMMP25
 
 	bcf		flags2,EROSION_MODE     ; set erosion factor to none
+    ;//WIP HSS// -- actually update step values and set depth to 0
 	call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP25:
 
 	bsf		flags2,EROSION_MODE     ; set erosion mode to 17%
+    ;//WIP HSS// -- actually update step values and set depth to 0
     call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
 
@@ -3014,14 +2217,10 @@ displayCN:
 
 checkPositionCN:
 
-    banksel depth3
-
-    movlw   depth3
-    call    isPosGtYQ
-
+    call    isDepthGreaterThanTarget ; Check to see if depth >= target 
     bcf     flags,AT_DEPTH
     btfsc   STATUS,C
-    bsf     flags,AT_DEPTH  ; if isPosGTYP returned C=1, depth reached so set flag
+    bsf     flags,AT_DEPTH  ; if isDepthGreaterThanTarget returned C=1, depth reached so set flag
 
     return
 
@@ -3685,7 +2884,7 @@ pulseMotorUpWithDelay:
 ; NOTE: The delay value of .15 worked for both standard and extended heads.  The cut rate
 ; for the extended head was about 50% too slow compared to desired rate of 0.001 per minute.
 ; The burn was very consistent and customer wanted to try paralleling the power supplies
-; to increase burn rate rather than experiment with program changes.  Orginally, this delay
+; to increase burn rate rather than experiment with program changes.  Originally, this delay
 ; value was loaded from normDelay.  If it is decided that each head needs a different value,
 ; a new variable needs to be created (ex: cutDelay) and loaded specifically for each head type
 ; because normDelay and setupDelay are already used to control the speeds in jog mode.  The values
@@ -4806,80 +4005,73 @@ L13:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; isDepthGtYQ
+; isDepthGreaterThanTarget
 ;
-; Compares five digits of current depth value with YQ, any five byte value.  The depth value can be
-; negative but the YQ value must always be positive.
+; Compares the top five most significant digits of the current depth against the top five most
+; significant digits of the target depth. Note that the depth value can be negative, but the target
+; must always be positive.
 ;
-;   The bytes in depth compared are:
-;       EEEEEnnnnnn
-;   where n represents ignored digits while E represents digits to be compared.
+; The bytes in depth and target compared are:
+;   EEEEEnnnnnn
+; where n represents ignored digits while E represents digits to be compared.
 ;
 ; For comparing depth and target, only xx.xxx digits are necessary. The lowest digits are required
-; to achieve accuracy, but for checking to see if target reached, only the five digits are needed.
+; to achieve accuracy while tracking the position of the head, but for checking to see if target 
+; reached, only the five digits are needed.
 ;
-; Typically, YQ should be the same five digits in the value to be compared (such as target, in
-; which case YQ would point to target10).
+; ON ENTRY:
+;   no requirements
 ;
-; On entry:
-;
-; FSR0 = address of YQ, value to compare depth with.
-;
-; Returns C = 1 if Depth >= YQ.
-;
+; ON EXIT:
+;   C = 0 if Depth <= Target 
+;   C = 1 if Depth >  Target
+;   
 
-; //wip hss --  redo this function
-; change so that FSR0 points to YQ (target10) on entry -- W no longer needed on entry
-; change to compare 5 digits instead of 4  
-; clear target value (all 11 digits) before loading from eeprom    
+isDepthGreaterThanTarget:
     
-isPosGtYQ:
-
-    movwf   FSR0L           ; point FSR to YQ
-
-    movf    INDF0,W         ; compare most sig digits
-    subwf   depth10,W
-    btfss   STATUS,C        ; if no borrow, position3 is larger or equal
-    return
+    bcf     STATUS,C        ; clear for operations below
     
-    incf    FSR0L,F         ; compare next digit
-    movf    INDF0,W
-    subwf   depth9,W
-    btfss   STATUS,C        ; if no borrow, position2 is larger or equal
-    return
-
-    incf    FSR0L,F         ; compare next digit
-    movf    INDF0,W
-    subwf   depth8,W
-    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
-    return
-        
-    incf    FSR0L,F         ; compare next digit
-    movf    INDF0,W
-    subwf   depth7,W
-    btfss   STATUS,C        ; if no borrow, position1 is larger or equal
-    return
-
-; wip hss -- add code to check for depth6    
+    banksel depth10         ; target and depth should always be in the same bank
     
-    bcf     STATUS,C        ; preload for less than
     movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
-    btfss   STATUS,Z        
-    return                  ; if Z flag set, sign is negative, return with C bit cleared
-                            ; (position < YQ)
+    btfss   STATUS,Z        ; if set, depth < target because depth sign is negative
+        return              ; return C=0 because depth < target
 
-    bsf     STATUS,C        ; all digits of position are >= all digits of YQ and position is
-                            ; positive: return with C = 1
-
-    return
+    movf    depth10,W      ; compare next least significant digits
+    subwf   target10,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
     
-; end of isPosGtYQ
+    movf    depth9,W       ; compare next least significant digits
+    subwf   target9,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth8,W       ; compare next least significant digits
+    subwf   target8,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth7,W       ; compare next least significant digits
+    subwf   target7,W
+    btfss   STATUS,C        ; if set, depth < target
+        return              ; return C=1 because depth > target
+    
+    movf    depth6,W       ; compare next least significant digits
+    subwf   target6,W
+    
+    return                  ; return C=1 or C=0 depending on the results of the last operation
+    
+; end of isDepthGreaterThanTarget
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
 ; incDepth
 ;
 ; Increments the signed unpacked BCD depth position variable by one step distance.
+;
+; If depth is negative, the condition depth + step <= 0 must always be true in order for the code to
+; work. This means that the step value can NEVER change during operation.
 ;
 ; On entry:
 ;
@@ -4928,6 +4120,9 @@ negativeIBV:
 ; decDepth
 ;
 ; Decrements the signed unpacked BCD depth position variable by one step distance.
+;
+; If depth is positive, the condition depth - step >= 0 must always be true in order for the code to
+; work. This means that the step value can NEVER change during operation.
 ;
 ; On entry:
 ;
@@ -5084,9 +4279,11 @@ addBCDVars:
     movwf   scratch1        ; use scratch variable as loop counter
 
     decf    WREG,F          ; adjust for use to move to digit 0
+    
     addwf   FSR0L,F         ; point to digit 0 of operand 1
     btfsc   STATUS,C
     incf    FSR0H,F
+    
     addwf   FSR1L,F         ; point to digit 0 of operand 2
     btfsc   STATUS,C
     incf    FSR1H,F
@@ -5098,9 +4295,9 @@ aB6BV1Loop1:
     moviw   FSR1--          ; add digit of the two operands
     addwfc  INDF0,F
     movlw   .10
-    subwf   INDF0,W         ; compare with .10 (W = f - W)
-    btfss   STATUS,C
-    goto    aB6BV1          ; no carry if borrow (C = 1) ~ digit < .10
+    subwf   INDF0,W         ; compare with 10 (W = f - W)
+    btfss   STATUS,C        
+    goto    aB6BV1          ; C = 0 if borrow ~ digit < 10
 
     movlw   .10             ; adjust digit to valid BCD
     subwf   INDF0,F         ; (F = f - W) (this will always leave Carry bit set to carry over)
@@ -5494,7 +4691,7 @@ writeControl:
     movlw   0x1
     movwf   scratch1        ; scratch1 = 1
     
-    call    writeWordLCD    ; write 1 followed by scratch0 to LCD
+    call    writeWordLCD    ; write 0 followed by scratch0 to LCD
 
     return
 
@@ -5574,41 +4771,6 @@ writeByteLCD:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; readFromEEprom
-; 
-; Read block of bytes from EEprom.
-;
-; Address in EEprom from which to read first byte should be in eepromAddressH/L.
-; Number of bytes to read should be in eepromCount.
-; Indirect register FSR0 should point to first byte in RAM to be written into.
-; The block of bytes will be copied from EEprom to RAM.
-; 
-
-readFromEEprom:
-
-loopRFE1:
-
-    call    readByteFromEEprom1ViaI2C
-
-    banksel scratch0            ; store byte read to the buffer
-    movwf   scratch0
-    movwi   FSR0++
-
-    banksel eepromAddressL
-	incf	eepromAddressL,F    ; move to next address in EEprom
-    btfsc   STATUS,Z
-	incf	eepromAddressH,F	; increment high byte on low byte rollover
-
-    banksel eepromCount
-	decfsz	eepromCount,F       ; count down number of bytes transferred
-	goto	loopRFE1            ; not zero yet - transfer more bytes
-
-	return
-
-; end of readFromEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; writeToEeprom
 ;
 ; Writes block of bytes to EEprom.
@@ -5680,44 +4842,6 @@ setDigitalPotInChip1:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; sendBytesToLEDPICViaI2C
-;
-; Sends byte to the LED PIC via the I2C bus.
-;
-; The number of bytes to be written should be in scratch0.
-; Indirect register FSR0 should point to first byte in RAM to be written.
-;
-
-sendBytesToLEDPICViaI2C:
-
-    call    clearSSP1IF             ; make sure flag is cleared before starting
-
-    call    generateI2CStart
-
-    movlw   LED_PIC_WRITE_ID        ; send proper ID to write to LED PIC
-    call    sendI2CByte             ; send byte in W register on I2C bus after SSP1IF goes high
-
-loopSBLP1:
-
-    moviw   FSR0++                  ; load next byte to be sent
-    call    sendI2CByte
-
-    banksel scratch0
-	decfsz	scratch0,F              ; count down number of bytes transferred
-	goto	loopSBLP1               ; not zero yet - trasfer more bytes
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
-
-    call    generateI2CStop
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
-
-    return
-
-; end of sendBytesToLEDPICViaI2C
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; writeByteToEEprom1ViaI2C
 ;
 ; Writes a byte to EEprom1 via the I2C bus.
@@ -5756,73 +4880,6 @@ writeByteToEEprom1ViaI2C:
     return
 
 ; end of writeByteToEEprom1ViaI2C
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; readByteFromEEprom1ViaI2C
-;
-; Reads a byte from EEprom1 via the I2C bus.
-;
-; The byte read will be returned in scratch0.
-; The EEprom source address word should be in eepromAddressL/H
-;
-; To read a byte from the EEprom, the source address is first set by using a write command. A
-; restart condition is then generated and the byte read using a read command.
-; After the read, a NACK is sent to the slave followed by a stop condition.
-;
-
-readByteFromEEprom1ViaI2C:
-
-    call    clearSSP1IF             ; make sure flag is cleared before starting
-
-    call    generateI2CStart
-
-    movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1 (used to set address)
-    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
-
-    banksel eepromAddressH          ; send the address high byte
-    movf    eepromAddressH,W
-    call    sendI2CByte
-
-    banksel eepromAddressL          ; send the address low byte
-    movf    eepromAddressL,W
-    call    sendI2CByte
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
-
-    call    generateI2CRestart
-
-    movlw   EEPROM1_READ_ID        ; send proper ID to write to EEprom 1
-    call    sendI2CByte            ; send byte in W register via I2C bus after SP1IF goes high
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
-
-    banksel SSP1CON2
-    bsf     SSP1CON2,RCEN
-
-    call    waitForSSP1IFHighThenClearIt;    wait for high flag upon reception completion
-
-    banksel SSP1BUF                 ; store the received byte in scratch0
-    movf    SSP1BUF,W
-    banksel scratch0
-    movwf   scratch0
-
-    banksel SSP1CON2                ; send NACK to terminate read
-    bsf     SSP1CON2,ACKDT          ; send high bit (NACK)
-    bsf     SSP1CON2,ACKEN          ; enable NACK transmission
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon NACK transmission complete
-
-    banksel SSP1CON2
-    bcf     SSP1CON2,ACKDT          ; reset to send ACKs
-
-    call    generateI2CStop
-
-    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
-
-    return
-
-; end of readByteFromEEprom1ViaI2C
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -6039,34 +5096,6 @@ clearWCOL:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; setupI2CMaster7BitMode
-;
-; Sets the MASTER SYNCHRONOUS SERIAL PORT (MSSP) MODULE to the I2C Master mode using the 7 bit
-; address mode.
-;
-; NOTE: RB4 and RB6 must have been configured elswhere as inputs for this mode.
-;
-
-setupI2CMaster7BitMode:
-
-    movlw   0x27			; set baud rate at 100kHz for oscillator frequency of 16 Mhz
-    banksel SSP1ADD
-    movwf   SSP1ADD
-
-    banksel SSP1CON1
-    bcf	SSP1CON1,SSP1M0		; SSPM = b1000 ~ I2C Master mode, clock = FOSC / (4 * (SSPADD+1))(4)
-    bcf	SSP1CON1,SSP1M1
-    bcf	SSP1CON1,SSP1M2
-    bsf	SSP1CON1,SSP1M3
-
-    bsf	SSP1CON1,SSPEN		;enables the MSSP module
-
-    return
-
-; end setupI2CMaster7BitMode
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; applyASCIINumDigitLimits
 ;
 ; Limits an ASCII value in scratch0 between ASCII '0' and '9'.
@@ -6223,7 +5252,931 @@ rbd3:
 ;--------------------------------------------------------------------------------------------------
     
     org 0x800	;start code on page 2 of 2047 byte boundary
+    
+;--------------------------------------------------------------------------------------------------
+; setup
+;
+; Presets variables and configures hardware.
+;
+; NOTE: The system does not use the internal comparators even though it appears there are analog
+; inputs to some of the comparator pins.  Those inputs are the output of external op-amps
+; acting as comparators - their outputs are read as digital inputs on RA3 and RA4
+;
 
+setup:
+
+    call    setupClock      ; set system clock source and frequency
+
+    call    setupPortA      ; prepare Port A for I/O
+
+    call    setupPortB      ; prepare Port B for I/O
+
+    call    setupPortC      ; prepare Port C  for I/O
+
+    call    initializeOutputs
+
+    call    setupI2CMaster7BitMode ; prepare the I2C serial bus for use
+
+    call    initHighLowCurrentLimitPotValues
+
+    call    setDigitalPots  ; set digital pot values to stored values
+
+;start of hardware configuration
+
+    clrf    INTCON          ; disable all interrupts
+
+    banksel OPTION_REG
+    movlw   0x58
+    movwf   OPTION_REG      ; Option Register = 0x58   0101 1000 b
+                            ; bit 7 = 0 : weak pull-ups are enabled by individual port latch values
+                            ; bit 6 = 1 : interrupt on rising edge
+                            ; bit 5 = 0 : TOCS ~ Timer 0 run by internal instruction cycle clock (CLKOUT ~ Fosc/4)
+                            ; bit 4 = 1 : TOSE ~ Timer 0 increment on high-to-low transition on RA4/T0CKI/CMP2 pin (not used here)
+							; bit 3 = 1 : PSA ~ Prescaler assigned to WatchDog; Timer0 will be 1:1 with Fosc/4
+                            ; bit 2 = 0 : Bits 2:0 control prescaler:
+                            ; bit 1 = 0 :    000 = 1:2 scaling for Timer0 (if assigned to Timer0)
+                            ; bit 0 = 0 :
+    
+;end of hardware configuration
+
+    banksel flags
+
+    movlp   high reallyBigDelay     ; ready PCLATH for the calls below
+    call    reallyBigDelay
+    call    zeroDepth               ; clear the depth position variable
+    movlp   high setup              ; set PCLATH back to what it was
+
+    clrf    buttonState             ; zero various variables
+
+    call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
+
+    ; reset some values to a default state
+    ; leave WALL_MODE as read from eeprom - this state is saved
+	; leave MOTOR_DIR_MODE as read from eeprom - this state is saved
+
+    bcf     flags,EXTENDED_MODE
+    bcf     flags,CUT_STARTED
+    bcf     flags,AT_DEPTH
+    bcf     flags,DATA_MODIFIED
+    bcf     flags,UPDATE_DISPLAY
+
+    call    readSparkLevelsFromEEprom
+
+    ; set sparkLevel to value loaded for Notch or Wall mode depending on current mode
+
+    movf    sparkLevelNotch,W   ; use Notch mode value if in Wall Reduction mode
+    btfsc   flags,WALL_MODE
+    movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
+    movwf   sparkLevel          ; save the selected value
+
+    call    readTargetValueFromEEprom    ; read the value stored for depth from the EEProm
+
+    call    readPWMValsFrmEEpromSendLEDPIC
+
+    ; set up the LCD buffer variables
+
+    banksel LCDFlags
+
+    clrf    LCDFlags        
+    movlw   high LCDBuffer0
+    movwf   LCDBufferPtrH
+    movlw   low LCDBuffer0
+    movwf   LCDBufferPtrL
+
+    clrf    LCDBufferCnt    ; no characters in the buffer
+	
+; enable the interrupts
+
+	bsf	    INTCON,PEIE	    ; enable peripheral interrupts (Timer0 is a peripheral)
+    bsf     INTCON,T0IE     ; enable TMR0 interrupts
+    bsf     INTCON,GIE      ; enable all interrupts
+
+    banksel MOTOR_ENABLE_P
+    bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
+
+    call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
+
+    call    setLEDArrays    ; set the on/off states for the LED arrays
+
+    call    sendLEDPICStart     ; command the LED PIC to display Current/Voltage on LED arrays
+
+    return
+
+; end of setup
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupClock
+;
+; Sets up the system clock source and frequency.
+;
+; Assumes clock related configuration bits are set as follows:
+;
+;   _FOSC_INTOSC,  _CPUDIV_NOCLKDIV, _PLLMULT_4x, _PLLEN_DISABLED
+;
+; Assumes all programmable clock related options are at Reset default values.
+;
+; NOTE: Adjust I2C baud rate generator value when Fosc is changed.
+;
+
+setupClock:
+
+    ; choose internal clock frequency of 16 Mhz
+
+    banksel OSCCON
+
+    bsf     OSCCON, IRCF0
+    bsf     OSCCON, IRCF1
+    bsf     OSCCON, IRCF2
+    bsf     OSCCON, IRCF3
+
+    return
+
+; end of setupClock
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPortA
+;
+; Sets up Port A for I/O operation.
+;
+; NOTE: Writing to PORTA is same as writing to LATA for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+; NOTE: RA0, RA1 and RA3 can only be inputs on the PIC16f1459 device. 
+;       RA2, RA6, RA7 are not implemented.
+;
+
+setupPortA:
+
+    banksel WPUA
+    movlw   b'00000000'                 ; disable weak pull-ups
+    movwf   WPUA
+
+    banksel PORTA
+    clrf    PORTA                       ; init port value
+
+    banksel LATA                        ; init port data latch
+    clrf    LATA
+
+    banksel ANSELA
+    clrf    ANSELA                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISA
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISA
+
+    ; set direction for each pin used
+
+    bsf     TRISA, SERIAL_IN            ; input
+    bsf     TRISA, SHORT_DETECT         ; input
+    bsf     TRISA, HI_LIMIT             ; input
+    bcf     TRISA, POWER_ON             ; output
+
+    return
+
+; end of setupPortA
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPortB
+;
+; Sets up Port B for I/O operation.
+;
+; NOTE: Writing to PORTB is same as writing to LATB for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+; NOTE: RB0, RB1, RB2, RB3 are not implemented on the PIC16f1459 device.
+;
+
+setupPortB:
+
+    banksel WPUB
+    movlw   b'00000000'                 ; disable weak pull-ups
+    movwf   WPUB
+
+    banksel PORTB
+    clrf    PORTB                       ; init port value
+
+    banksel LATB                        ; init port data latch
+    clrf    LATB
+
+    bsf     LATB,SERIAL_OUT             ; initialize SERIAL_OUT high before changing pin to output
+                                        ; so a start bit won't be transmitted
+    banksel ANSELB
+    clrf    ANSELB                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISB
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISB
+
+    bsf     TRISB, JOG_DWN_SW           ; input
+    bcf     TRISB, SERIAL_OUT           ; output
+
+    return
+
+; end of setupPortB
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupPortC
+;
+; Sets up Port C for I/O operation.
+;
+; NOTE: Writing to PORTC is same as writing to LATC for PIC16f1459. The code example from the
+; data manual writes to both -- probably to be compatible with other PIC chips.
+;
+
+setupPortC:
+
+    ; Port C does not have a weak pull-up register
+
+    banksel PORTC
+    clrf    PORTC                       ; init port value
+
+    banksel LATC                        ; init port data latch
+    clrf    LATC
+
+    banksel ANSELC
+    clrf    ANSELC                      ; setup port for all digital I/O
+
+    ; set I/O directions
+
+    banksel TRISC
+    movlw   b'11111111'                 ; first set all to inputs
+    movwf   TRISC
+
+    bcf     TRISC, MOTOR_ENABLE         ; output
+    bsf     TRISC, MODE_SW              ; input
+    bsf     TRISC, JOG_UP_SW            ; input
+    bcf     TRISC, MOTOR_DIR            ; output
+    bcf     TRISC, MOTOR_STEP           ; output
+    bsf     TRISC, LO_LIMIT             ; input
+    bcf     TRISC, MOTOR_MODE           ; output
+    bsf     TRISC, SELECT_SW            ; input
+
+    return
+
+; end of setupPortC
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; initializeOutputs
+;
+; Initializes all outputs to known values.
+;
+; Write to port latches to avoid problems with read-modify-write when changing multiple outputs
+; in quick succession.
+;
+
+initializeOutputs:
+
+    banksel LATB
+    bsf     LATB,SERIAL_OUT
+
+    banksel LATA
+    bcf     LATA, POWER_ON
+
+    banksel LATC
+    bsf     LATC, MOTOR_STEP
+
+    banksel LATC
+    bsf     LATC, MOTOR_DIR
+
+    banksel LATC              ; disable the motor
+    bsf     LATC, MOTOR_ENABLE
+
+    banksel LATC
+	bcf     LATC, MOTOR_MODE    ; choose full step if J8-1 (MS1) = Off and J8-2 (MS2) = On
+                                        ; see notes at top of page for more info
+
+    return
+
+; end of initializeOutpus
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; setupI2CMaster7BitMode
+;
+; Sets the MASTER SYNCHRONOUS SERIAL PORT (MSSP) MODULE to the I2C Master mode using the 7 bit
+; address mode.
+;
+; NOTE: RB4 and RB6 must have been configured elswhere as inputs for this mode.
+;
+
+setupI2CMaster7BitMode:
+
+    movlw   0x27			; set baud rate at 100kHz for oscillator frequency of 16 Mhz
+    banksel SSP1ADD
+    movwf   SSP1ADD
+
+    banksel SSP1CON1
+    bcf	SSP1CON1,SSP1M0		; SSPM = b1000 ~ I2C Master mode, clock = FOSC / (4 * (SSPADD+1))(4)
+    bcf	SSP1CON1,SSP1M1
+    bcf	SSP1CON1,SSP1M2
+    bsf	SSP1CON1,SSP1M3
+
+    bsf	SSP1CON1,SSPEN		;enables the MSSP module
+
+    return
+
+; end setupI2CMaster7BitMode
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; initHighLowCurrentLimitPotValues
+;
+; Sets the high and low current comparator digital pot variables to default settings.
+;
+; Sets the Power Level value to "2" for the default settings.
+;
+; Does not send the values to the digital pots.
+;
+
+initHighLowCurrentLimitPotValues:
+
+    movlw   HI_CURRENT_LIMIT_POT
+    banksel hiCurrentLimitPot
+    movwf   hiCurrentLimitPot
+
+    movlw   LO_CURRENT_LIMIT_POT
+    banksel loCurrentLimitPot
+    movwf   loCurrentLimitPot
+
+    movlw   .2                  ; default power level for the default pot settings is 2
+    banksel powerLevel
+    movwf   powerLevel
+
+    return
+
+; end of initHighLowCurrentLimitPotValues
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; setDigitalPots
+;
+; Sets the digital pot values to their stored settings.
+;
+
+setDigitalPots:
+
+    movlp   high setHighCurrentLimitDigitalPot      ; readies the PCLATH for the calls below
+    
+    call    setHighCurrentLimitDigitalPot
+
+    call    setLowCurrentLimitDigitalPot
+
+    banksel scratch0
+    movlw   VOLTAGE_MONITOR_POT_ADDR
+    movwf   scratch0
+    movlw   VOLTAGE_MONITOR_POT
+    movwf   scratch1
+    call    setDigitalPotInChip1
+
+    banksel scratch0
+    movlw   CURRENT_MONITOR_POT_ADDR
+    movwf   scratch0
+    movlw   CURRENT_MONITOR_POT
+    movwf   scratch1
+    call    setDigitalPotInChip1
+    
+    movlp   high setDigitalPots             ; set PCLATH back to what it was on entry    
+
+    return
+
+; end of setDigitalPots
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; readFlagsFromEEprom
+;
+; Reads the flags and flags2 values from eeprom.
+;
+
+readFlagsFromEEprom:
+
+    banksel flags
+    
+    movlw   high flags      ; address in RAM
+    movwf   FSR0H
+    movlw   low flags
+    movwf   FSR0L
+        
+    clrf    eepromAddressH
+    movlw   eeFlags         ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .2
+    movwf   eepromCount     ; read 2 bytes
+    call    readFromEEprom
+
+    return
+
+; end of readFlagsFromEEprom
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; readSparkLevelsFromEEprom
+;
+; Reads the spark Wall/Notch aggression/speed values from eeprom.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+;
+
+readSparkLevelsFromEEprom:
+
+    banksel sparkLevelNotch
+
+    movlw   high sparkLevelNotch    ; address in RAM
+    movwf   FSR0H
+    movlw   low sparkLevelNotch
+    movwf   FSR0L
+
+    clrf    eepromAddressH
+    movlw   eeSparkLevelNotch   ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .2
+    movwf   eepromCount         ; read 2 bytes
+    call    readFromEEprom
+
+    ; apply limits to the values to prevent illegal values read from eeprom
+
+    banksel scratch0
+
+    movlw   high scratch0                   ; point FSR0 at the high limit
+    movwf   FSR1H
+    movlw   low scratch0
+    movwf   FSR1L
+
+    movlw   0x81                            ; upper limit
+    movwf   scratch0
+    movlw   0x01                            ; lower limit
+    movwf   scratch1
+
+    movlp   high applyLimitsToByteValue     ; set PCLATH for calls to applyLimitsToByteValue
+    
+    movf    sparkLevelNotch,W               ; limit notch spark level value
+    movwf   scratch2
+    call    applyLimitsToByteValue
+    movwf   sparkLevelNotch                 ; update variable with clipped value
+
+    movf    sparkLevelWall,W                ; limit wall spark level value
+    movwf   scratch2
+    call    applyLimitsToByteValue
+    movwf   sparkLevelWall                  ; update variable with clipped value
+    
+    
+    movlp   high readSparkLevelsFromEEprom  ; set PCLATH back to what it was on entry
+    
+    return
+
+; end of readSparkLevelsFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readTargetValueFromEEprom
+;
+; Reads the user set target depth value from eeprom. These are unpacked BCD digits.
+;
+; Each digit is checked for valid range of 0-9 and forced to that range.
+;
+; Note: these variables must be kept contiguous in memory and eeprom.
+;
+
+readTargetValueFromEEprom:
+
+    movlw   high target9
+    movwf   FSR0H
+    movlw   low target9      ; address in RAM
+    movwf   FSR0L
+    
+    banksel eepromAddressH
+    clrf    eepromAddressH
+    movlw   eeTarget3        ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .4
+    movwf   eepromCount     ; read 4 bytes
+    call    readFromEEprom
+
+    ; check each digit for illegal BCD value (0-9)
+    
+    movlp   high applyBCDDigitLimits    ; ready PCLATH for the calls below
+    
+    banksel target9
+    movf    target9,W
+    movwf   scratchc2
+    call    applyBCDDigitLimits
+    movwf   target9
+
+    movf    target8,W
+    movwf   scratchc2
+    call    applyBCDDigitLimits
+    movwf   target8
+
+    movf    target7,W
+    movwf   scratchc2
+    call    applyBCDDigitLimits
+    movwf   target7
+
+    movf    target6,W
+    movwf   scratchc2
+    call    applyBCDDigitLimits
+    movwf   target6
+    
+    movlp   high readTargetValueFromEEprom  ; set PCLATH back to what it was on entry
+
+    return
+
+; end of readTargetValueFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readPWMValsFrmEEpromSendLEDPIC
+;
+; Reads the Pulse Width Module (PWM) values for the Cutting Current pulse controller and
+; transmits the values to the LED PIC which handles that function via the I2C bus.
+;
+; If the values have never previously been saved to the eeprom, the checksum validation should
+; fail and default values will be used.
+;
+
+readPWMValsFrmEEpromSendLEDPIC:
+
+    call    readPWMValuesFromEEprom
+
+    call    sendPWMValuesToLEDPIC
+
+    return
+
+; end of readPWMValsFrmEEpromSendLEDPIC
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; readPWMValuesFromEEprom
+;
+; Reads PWM module time period and duty cycle and output polarity values from the eeprom.
+;
+; These values are sent to the LED PIC to specify the period and duty cycle of the pulse
+; controlling the on/off times of the cutting current.
+;
+; The least significant bit of the polarity value is used to set the PWM output polarity.
+;
+; Before saving, the bytes are added together to create a checksum which is also stored in the
+; eeprom. This allows the reading function to verify that the values are valid and also that the
+; eeprom was not empty and the values had never been stored.
+;
+; The value of 1 is added to the checksum...(see note in the header for function
+;   savePWMValuesToEEprom for details).
+;
+; Upon reading, if the checksum is invalid then safe default PWM values are used instead.
+;
+; NOTE: Improper PWM values can destroy the MOSFETs.
+;
+
+readPWMValuesFromEEprom:
+
+    banksel pwmDutyCycleHiByte
+
+    movlw   high pwmDutyCycleHiByte      ; address in RAM
+    movwf   FSR0H
+    movlw   low pwmDutyCycleHiByte
+    movwf   FSR0L
+        
+    clrf    eepromAddressH
+    movlw   eePWMDutyCycleHiByte         ; address in EEprom
+    movwf   eepromAddressL
+    movlw   .5
+    movwf   eepromCount                  ; read 4 bytes
+    call    readFromEEprom
+
+    banksel pwmDutyCycleHiByte
+
+    clrw                                ; calculate the checksum for all PWM values
+    addwf   pwmDutyCycleHiByte,W
+    addwf   pwmDutyCycleLoByte,W
+    addwf   pwmPeriod,W
+    addwf   pwmPolarity,W
+    addlw   1                           ; see note in function header
+
+    subwf   pwmCheckSum,W               ; compare calculated checksum with that read from eeprom
+    btfsc   STATUS,Z
+    goto    pwmValuesReadAreValid       ; zero flag set, checksum matched, skip
+
+    ; checksum read did not match calculated checksum, so use default values
+
+    movlw   PWM_DUTY_CYCLE_HI_BYTE_DEFAULT
+    movwf   pwmDutyCycleHiByte
+
+    movlw   PWM_DUTY_CYCLE_LO_BYTE_DEFAULT
+    movwf   pwmDutyCycleLoByte
+
+    movlw   PWM_PERIOD_DEFAULT
+    movwf   pwmPeriod
+
+    movlw   PWM_POLARITY_DEFAULT
+    movwf   pwmPolarity
+
+    clrw                                ; calculate the checksum for all PWM values
+    addwf   pwmDutyCycleHiByte,W
+    addwf   pwmDutyCycleLoByte,W
+    addwf   pwmPeriod,W
+    addwf   pwmPolarity,W
+    addlw   1                           ; see note in function header
+    movwf   pwmCheckSum
+
+pwmValuesReadAreValid:
+
+    return
+
+; end of readPWMValuesFromEEprom
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; sendPWMValuesToLEDPIC
+;
+; Sends the PWM values to the LED PIC.
+;
+
+sendPWMValuesToLEDPIC:
+
+    banksel scratch0
+    movlw   .6                      ; send command byte and two values
+    movwf   scratch0
+
+    movlw   LEDPIC_SET_PWM         ; precede values with command byte
+    banksel pwmSetCommandByte
+    movwf   pwmSetCommandByte
+
+    movlw   high pwmSetCommandByte          ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low pwmSetCommandByte
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendPWMValuesToLEDPIC
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; readFromEEprom
+; 
+; Read block of bytes from EEprom.
+;
+; Address in EEprom from which to read first byte should be in eepromAddressH/L.
+; Number of bytes to read should be in eepromCount.
+; Indirect register FSR0 should point to first byte in RAM to be written into.
+; The block of bytes will be copied from EEprom to RAM.
+; 
+
+readFromEEprom:
+
+loopRFE1:
+
+    call    readByteFromEEprom1ViaI2C
+
+    banksel scratch0            ; store byte read to the buffer
+    movwf   scratch0
+    movwi   FSR0++
+
+    banksel eepromAddressL
+	incf	eepromAddressL,F    ; move to next address in EEprom
+    btfsc   STATUS,Z
+	incf	eepromAddressH,F	; increment high byte on low byte rollover
+
+    banksel eepromCount
+	decfsz	eepromCount,F       ; count down number of bytes transferred
+	goto	loopRFE1            ; not zero yet - transfer more bytes
+
+	return
+
+; end of readFromEEprom
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; readByteFromEEprom1ViaI2C
+;
+; Reads a byte from EEprom1 via the I2C bus.
+;
+; The byte read will be returned in scratch0.
+; The EEprom source address word should be in eepromAddressL/H
+;
+; To read a byte from the EEprom, the source address is first set by using a write command. A
+; restart condition is then generated and the byte read using a read command.
+; After the read, a NACK is sent to the slave followed by a stop condition.
+;
+
+readByteFromEEprom1ViaI2C:
+
+    movlp   high clearSSP1IF        ; ready PCLATH for the calls below
+    
+    call    clearSSP1IF             ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   EEPROM1_WRITE_ID        ; send proper ID to write to EEprom 1 (used to set address)
+    call    sendI2CByte             ; send byte in W register on I2C bus after SP1IF goes high
+
+    banksel eepromAddressH          ; send the address high byte
+    movf    eepromAddressH,W
+    call    sendI2CByte
+
+    banksel eepromAddressL          ; send the address low byte
+    movf    eepromAddressL,W
+    call    sendI2CByte
+
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
+
+    call    generateI2CRestart
+
+    movlw   EEPROM1_READ_ID        ; send proper ID to write to EEprom 1
+    call    sendI2CByte            ; send byte in W register via I2C bus after SP1IF goes high
+    
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
+
+    banksel SSP1CON2
+    bsf     SSP1CON2,RCEN
+
+    call    waitForSSP1IFHighThenClearIt;    wait for high flag upon reception completion
+
+    banksel SSP1BUF                 ; store the received byte in scratch0
+    movf    SSP1BUF,W
+    banksel scratch0
+    movwf   scratch0
+
+    banksel SSP1CON2                ; send NACK to terminate read
+    bsf     SSP1CON2,ACKDT          ; send high bit (NACK)
+    bsf     SSP1CON2,ACKEN          ; enable NACK transmission
+
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon NACK transmission complete
+
+    banksel SSP1CON2
+    bcf     SSP1CON2,ACKDT          ; reset to send ACKs
+
+    call    generateI2CStop
+
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
+
+    movlp   high readByteFromEEprom1ViaI2C  ; set PCLATH back to what it was on entry
+    
+    return
+
+; end of readByteFromEEprom1ViaI2C
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; resetLCD
+;
+; Resets the LCD screen.
+;
+
+resetLCD:
+    
+    movlp   high writeControl   ; readies the PCLATH for the calls below
+
+    movlw   CLEAR_SCREEN_CMD
+    call    writeControl        ; send Clear Display control code to the LCD
+
+    movlw   0x80
+    call    writeControl        ; position at line 1 column 1
+
+    call    flushAndWaitLCD     ; force the LCD buffer to print and wait until done
+
+    movlp   high resetLCD       ; set PCLATH back to what it was on entry
+    
+    return
+    
+; end of resetLCD
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setLEDArrays
+;
+; Sets LED arrays to known on/off states.
+;
+
+setLEDArrays:
+
+    banksel scratch2
+
+    movlw   0x00            ; value for red LED array
+    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch2
+    movlw   0x00            ; value for green LED array
+    comf    WREG,W          ; invert the value -- a zero turns an LED on
+    movwf   scratch3
+
+    call    sendLEDArrayValues
+
+    return
+
+; end of setLEDArrays
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; sendLEDArrayValues
+;
+; Sends values to LED PIC to set on/off state of the LED arrays.
+;
+; Value for the red LED array should be in scratch2.
+; Value for the red LED array should be in scratch3.
+;
+
+sendLEDArrayValues:
+
+    banksel scratch0
+
+    movlw   .3                      ; send command byte and two values
+    movwf   scratch0
+    movlw   LEDPIC_SET_LEDS         ; put command byte in scratch1
+    movwf   scratch1
+
+    movlw   high scratch1           ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low scratch1
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendLEDArrayValues
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sendLEDPICStart
+;
+; Sends start command to LED PIC to initiate displaying the Current and Voltage monitor voltages
+; on the LED arrays.
+;
+
+sendLEDPICStart:
+
+    banksel scratch0
+
+    movlw   .1                      ; send command byte
+    movwf   scratch0
+    movlw   LEDPIC_START            ; put command byte in scratch1
+    movwf   scratch1
+    
+    movlw   high scratch1           ; point to first byte to be sent
+    movwf   FSR0H
+    movlw   low scratch1
+    movwf   FSR0L
+
+    call    sendBytesToLEDPICViaI2C
+
+    return
+
+; end of sendLEDPICStart
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; sendBytesToLEDPICViaI2C
+;
+; Sends byte to the LED PIC via the I2C bus.
+;
+; The number of bytes to be written should be in scratch0.
+; Indirect register FSR0 should point to first byte in RAM to be written.
+;
+
+sendBytesToLEDPICViaI2C:
+
+    movlp   high clearSSP1IF        ; ready PCLATH for the calls below
+
+    call    clearSSP1IF             ; make sure flag is cleared before starting
+
+    call    generateI2CStart
+
+    movlw   LED_PIC_WRITE_ID        ; send proper ID to write to LED PIC
+    call    sendI2CByte             ; send byte in W register on I2C bus after SSP1IF goes high
+
+loopSBLP1:
+
+    movlp   high sendI2CByte ; ready PCLATH for the call to sendI2CByte
+    moviw   FSR0++                  ; load next byte to be sent
+    call    sendI2CByte
+    
+    movlp   high loopSBLP1          ; set PCLATH for the goto
+    banksel scratch0
+	decfsz	scratch0,F              ; count down number of bytes transferred
+	goto	loopSBLP1               ; not zero yet - trasfer more bytes
+
+    movlp   high waitForSSP1IFHighThenClearIt  ; ready PCLATH for the calls below
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
+    call    generateI2CStop
+    call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon stop condition finished
+    movlp   high sendBytesToLEDPICViaI2C    ; set PCLATH back to what it was on entry
+
+    return
+
+; end of sendBytesToLEDPICViaI2C
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; debugFunc1
 ;
@@ -6302,6 +6255,55 @@ dF1Loop:
     return
 
 ; end of debugFunc1
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; Constants in Program Memory
+;
+; Step Ratio Constants:
+;
+; Specifies the blade travel distance per motor step for different types of cutting heads.
+;
+; These are unpacked BCD decimal values, each digit can be 0-9.
+; The decimal point is two digits from the left for all depth related values.
+;
+; Standard Reach Tool Ratio
+;
+; One motor step is 0.000217391"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000217391
+; For 17% erosion factior use .000217391 * .83 = 0.000180435
+;
+; Extended Reach Tool Ratio
+;
+; One motor step is .000023774"
+; typically, blade erosion is 17%
+;
+; For 1:1 (no erosion factor), use .000023774
+; For 17% erosion factior use .000023774 * .83 = 0.000019732
+;
+; Unpacked BCD is used for inch/pulse depth related values as it allows for the fastest math during
+; operation. The decimal point is two digits from the left for all depth related values.
+;
+; NOTE: program memory is only 14 bits wide. Using dw rather than db forces each value to fill
+; an entire 14 bit word rather than being packed two values to a word.
+;
+; Last digit is sign: 0 for positive; 1 for negative
+;
+; 00.000217391 -> standard tool with no erosion factor ~ inches/motor pulse
+stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1,0     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000180435 -> standard tool with 17% erosion factor ~ inches/motor pulse
+std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5,0     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000023774 -> extended tool with no erosion factor ~ inches/motor pulse
+extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4,0     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000019732 -> extended tool with 17% erosion factor ~ inches/motor pulse
+ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2,0     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; end of Constants in Program Memory
 ;--------------------------------------------------------------------------------------------------
     
 ;--------------------------------------------------------------------------------------------------
