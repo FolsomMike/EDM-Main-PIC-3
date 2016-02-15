@@ -21,7 +21,6 @@
 ; There are two PIC controllers on the board -- the Main PIC and the LCD PIC.  This code is
 ; for the Main PIC.  The Main PIC sends data to the LCD PIC via a serial data line for display
 ; on the LCD.
-;
 ; 
 ;--------------------------------------------------------------------------------------------------
 ; Notes on PCLATH
@@ -917,6 +916,8 @@ menuLoop:
 
 setup:
 
+    clrf    INTCON          ; disable all interrupts
+
     call    setupClock      ; set system clock source and frequency
 
     call    setupPortA      ; prepare Port A for I/O
@@ -935,8 +936,6 @@ setup:
 
 ;start of hardware configuration
 
-    clrf    INTCON          ; disable all interrupts
-
     banksel OPTION_REG
     movlw   0x58
     movwf   OPTION_REG      ; Option Register = 0x58   0101 1000 b
@@ -944,9 +943,9 @@ setup:
                             ; bit 6 = 1 : interrupt on rising edge
                             ; bit 5 = 0 : TOCS ~ Timer 0 run by internal instruction cycle clock (CLKOUT ~ Fosc/4)
                             ; bit 4 = 1 : TOSE ~ Timer 0 increment on high-to-low transition on RA4/T0CKI/CMP2 pin (not used here)
-							; bit 3 = 1 : PSA ~ Prescaler assigned to WatchDog; Timer0 will be 1:1 with Fosc/4
+							; bit 3 = 1 : PSA ~ Prescaler disabled; Timer0 will be 1:1 with Fosc/4
                             ; bit 2 = 0 : Bits 2:0 control prescaler:
-                            ; bit 1 = 0 :    000 = 1:2 scaling for Timer0 (if assigned to Timer0)
+                            ; bit 1 = 0 :    000 = 1:2 scaling for Timer0
                             ; bit 0 = 0 :
     
 ;end of hardware configuration
@@ -1875,6 +1874,8 @@ endISR:
 ; NOTE NOTE NOTE
 ; It is important to use no (or very few) subroutine calls.  The stack is only 8 deep and
 ; it is very bad for the interrupt routine to use it.
+;
+; TMR0 is never reloaded -- thus it wraps around and does a full count for each interrupt.
 ;
 
 handleTimer0Interrupt:
@@ -5493,7 +5494,7 @@ writeControl:
     movlw   0x1
     movwf   scratch1        ; scratch1 = 1
     
-    call    writeWordLCD    ; write 0 followed by scratch0 to LCD
+    call    writeWordLCD    ; write 1 followed by scratch0 to LCD
 
     return
 
