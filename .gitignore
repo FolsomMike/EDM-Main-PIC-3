@@ -12,18 +12,20 @@
 # When a new user clones the project, the above files must be transferred outside of git.
 #
 
-OPT EDM Main PIC 2.X/build
-
 archive/
 Distributions/
-OPT EDM Main PIC 2.X/build/default/production/
-OPT EDM Main PIC 2.X/nbproject/Makefile-default.mk
-OPT EDM Main PIC 2.X/nbproject/Makefile-genesis.properties
-OPT EDM Main PIC 2.X/nbproject/Makefile-local-default.mk
-OPT EDM Main PIC 2.X/nbproject/configurations.xml
-OPT EDM Main PIC 2.X/nbproject/private/configurations.xml
-OPT EDM Main PIC 2.X/nbproject/private/private.xml
-OPT EDM Main PIC 2.X/nbproject/project.xml
+build/
+nbproject/Makefile-impl.mk
+nbproject/Makefile-variables.mk
+nbproject/Package-default.bash
+nbproject/Makefile-default.mk
+nbproject/Makefile-local-default.mk
+nbproject/Makefile-genesis.properties
+nbproject/configurations.xml
+nbproject/private/configurations.xml
+nbproject/private/private.xml
+nbproject/project.xml
+nbproject/private/SuppressibleMessageMemo.properties
 *.mch
 *.MCH
 *.o
@@ -44,3 +46,5 @@ OPT EDM Main PIC 2.X/nbproject/project.xml
 *.MCS
 *.mcw
 *.MCW
+!OriginalHexFiles/*.*
+!IDE Project File Copies/*.*
