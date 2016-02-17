@@ -15,6 +15,7 @@
 archive/
 Distributions/
 build/
+*.fil
 nbproject/Makefile-impl.mk
 nbproject/Makefile-variables.mk
 nbproject/Package-default.bash
