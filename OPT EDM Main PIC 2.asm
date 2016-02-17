@@ -369,7 +369,7 @@ SHORT_DETECT_P  EQU     PORTA
 SHORT_DETECT    EQU     RA3         ; input ~ RA3 can only be input on PIC16f1459
 HI_LIMIT_P      EQU     PORTA
 HI_LIMIT        EQU     RA4         ; input ~ cutting current hight limit
-POWER_ON_P      EQU     PORTA
+POWER_ON_L      EQU     LATA
 POWER_ON        EQU     RA5         ; output
 ;NA_RA6         EQU     RA6         ; RA6 not implemented on PIC16f1459
 ;NA_RA7         EQU     RA7         ; RA7 not implemented on PIC16f1459
@@ -380,24 +380,24 @@ I2CSDA_LINE     EQU     RB4
 JOG_DWN_SW_P    EQU     PORTB
 JOG_DWN_SW      EQU     RB5         ; input
 I2CSCL_LINE     EQU     RB6
-SERIAL_OUT_P    EQU     PORTB
+SERIAL_OUT_L    EQU     LATB
 SERIAL_OUT      EQU     RB7         ; output ~ serial data out to other devices
 
 ; Port C
 
-MOTOR_ENABLE_P  EQU     PORTC
+MOTOR_ENABLE_L  EQU     LATC
 MOTOR_ENABLE    EQU     RC0         ; output
 MODE_SW_P       EQU     PORTC
 MODE_SW         EQU     RC1         ; input
 JOG_UP_SW_P     EQU     PORTC
 JOG_UP_SW       EQU     RC2         ; input
-MOTOR_DIR_P     EQU     PORTC
+MOTOR_DIR_L     EQU     LATC
 MOTOR_DIR       EQU     RC3         ; output
-MOTOR_STEP_P    EQU     PORTC
+MOTOR_STEP_L    EQU     LATC
 MOTOR_STEP      EQU     RC4         ; output
 LO_LIMIT_P      EQU     PORTC
 LO_LIMIT		EQU     RC5         ; input ~ cutting current low limit
-MOTOR_MODE_P    EQU     PORTC
+MOTOR_MODE_L    EQU     LATC
 MOTOR_MODE      EQU     RC6         ; output ~ motor step size selection
 SELECT_SW_P     EQU     PORTC
 SELECT_SW       EQU     RC7         ; input ~ select switch
@@ -1134,9 +1134,8 @@ startBitCheck:
     btfss   LCDFlags,startBit   ; if set, initiate a startbit and exit    
     goto    stopBitCheck
 
-    banksel SERIAL_OUT_P
-
-    bcf     SERIAL_OUT_P,SERIAL_OUT ; transmit start bit (low)
+    banksel SERIAL_OUT_L
+    bcf     SERIAL_OUT_L,SERIAL_OUT ; transmit start bit (low)
 
     banksel LCDFlags
 
@@ -1150,9 +1149,8 @@ stopBitCheck:
     btfss   LCDFlags,stopBit    ; if set, initiate a stopbit and exit
     goto    transmitByteT0I
 
-    banksel SERIAL_OUT_P
-
-    bsf     SERIAL_OUT_P, SERIAL_OUT           ; transmit stop bit (high)
+    banksel SERIAL_OUT_L
+    bsf     SERIAL_OUT_L, SERIAL_OUT           ; transmit stop bit (high)
 
     banksel LCDFlags
     
@@ -1174,12 +1172,11 @@ transmitByteT0I:
     movwf   FSR0L
     rlf     INDF0,F             ; get the first bit to transmit
 
-    banksel SERIAL_OUT_P
-
-    bcf     SERIAL_OUT_P,SERIAL_OUT ; set data line low first (brief low if bit is to be a one will
+    banksel SERIAL_OUT_L
+    bcf     SERIAL_OUT_L,SERIAL_OUT ; set data line low first (brief low if bit is to be a one will
                                     ; be ignored by receiver)
     btfsc   STATUS,C
-    bsf     SERIAL_OUT_P,SERIAL_OUT ; set high if bit was a 1
+    bsf     SERIAL_OUT_L,SERIAL_OUT ; set high if bit was a 1
 
     banksel LCDFlags
 
@@ -1235,7 +1232,7 @@ flipSign:
 ;
 ; Scans the button inputs, returning their state in buttonState and providing debouncing delay.
 ;
-; There are two entry points, scanButtons and scanButtonsQ:
+; There are two entry points, scanButtons and scanButtonsQ.
 ;
 ;  Entry at scanButtons first performs a long delay which debounces the switch if it was pressed
 ;  recently and gives the user time to release the button before it triggers again.
@@ -2044,13 +2041,12 @@ cutNotch:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
+    banksel POWER_ON_L
+    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
+
+    banksel flags
 
 cutLoop:
-
-    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage repeatedly
-                    ; (this is a hack fix because the pin seems to get set low by electrical noise)
-                    ; (may not be true for properly grounded PCBs with high voltage caps in place)
 
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
@@ -2228,9 +2224,10 @@ checkPositionCN:
 
 exitCN:
 
-    bcf     POWER_ON_P,POWER_ON    ; turn off the cutting voltage
+    banksel POWER_ON_L
+    bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
-    call    waitLCD         ; wait until buffer printed
+    call    waitLCD                 ; wait until buffer printed
 
     btfsc   flags,DATA_MODIFIED     ; if data has been modified, save to eeprom
     call    saveSparkLevelsToEEprom
@@ -2344,7 +2341,10 @@ cycleTest:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
+    banksel POWER_ON_L
+    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
+
+    banksel scratch1
 
     movlw   0x3
     movwf   scratch1
@@ -2358,10 +2358,6 @@ restartCycleCT:
 	movwf   cycleTestRetract1
 
 cycleLoopCT:
-
-    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage repeatedly
-                            ; (this is a hack fix because the pin seems to get set low by electrical noise)
-							; (may not be true for properly grounded PCBs with high voltage caps in place)
 
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
@@ -2474,7 +2470,8 @@ skipDirSymUpdateCT:
 	
 exitCT:
 
-    bcf     POWER_ON_P,POWER_ON    ; turn off the cutting voltage
+    banksel POWER_ON_L
+    bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
     call    waitLCD         ; wait until buffer printed
 
@@ -2837,10 +2834,18 @@ apuExit:
 ;
 
 pulseMotorDownWithDelay:
+    
+    banksel MOTOR_DIR_L
+    bsf     MOTOR_DIR_L,MOTOR_DIR       ; motor down for normal direction option
+	
+    banksel flags
+    btfss	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
+    goto    pMDWD1
 
-    bsf     MOTOR_DIR_P,MOTOR_DIR       ; motor down for normal direction option
-	btfsc	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
-    bcf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for reverse direction option
+    banksel MOTOR_DIR_L
+    bcf     MOTOR_DIR_L,MOTOR_DIR       ; motor down for reverse direction option
+
+pMDWD1:
 
 	goto	pulseMotorWithDelay
 
@@ -2858,10 +2863,19 @@ pulseMotorDownWithDelay:
 
 pulseMotorUpWithDelay:
 
-    bcf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for normal direction option
-	btfsc	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
-    bsf     MOTOR_DIR_P,MOTOR_DIR       ; motor up for reverse direction option
-	goto	pulseMotorWithDelay
+    banksel MOTOR_DIR_L
+    bcf     MOTOR_DIR_L,MOTOR_DIR       ; motor up for normal direction option
+	
+    banksel flags
+    btfss	flags,MOTOR_DIR_MODE        ; is motor direction option reverse?
+    goto    pMUWD1
+ 
+    banksel MOTOR_DIR_L
+    bsf     MOTOR_DIR_L,MOTOR_DIR       ; motor up for reverse direction option
+	
+pMUWD1:
+
+    goto	pulseMotorWithDelay
 
 ; end of pulseMotorUpWithDelay
 ;--------------------------------------------------------------------------------------------------
@@ -2895,25 +2909,33 @@ pulseMotorUpWithDelay:
 
 pulseMotorWithDelay:
 
+    banksel scratch1
+
     movlw   0x0
     movwf   scratch1
     ;movf    normDelay,W
     movlw   .15             ; see notes in header regarding this value (use .15 for normal head)
     call    bigDelayA
 
-    bcf     MOTOR_STEP_P,MOTOR_STEP
+    banksel MOTOR_STEP_L
+    bcf     MOTOR_STEP_L,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_L,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+
+    banksel flags
 
     return
 
 pulseMotorNoDelay:
 
-    bcf     MOTOR_STEP_P,MOTOR_STEP
+    banksel MOTOR_STEP_L
+    bcf     MOTOR_STEP_L,MOTOR_STEP
     nop
     nop
-    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+    bsf     MOTOR_STEP_L,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+
+    banksel flags
 
     return
 
@@ -3248,8 +3270,11 @@ jogMode:
     movlw   0xff
     call    bigDelayA       ; delay - give user chance to release button
 
-    bsf     POWER_ON_P,POWER_ON    ; turn on the cutting voltage
+    banksel POWER_ON_L
+    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
     
+    banksel flags
+
 loopJM:
 
     call    scanButtonsQ    ; monitor user input - Q entry point for short delay so motor runs
@@ -3260,18 +3285,28 @@ loopJM:
 
 ; jog up button press    
 
-    bcf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for normal direction option
-	btfsc	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
-    bsf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for reverse direction option
+    banksel MOTOR_DIR_L
+    bcf     MOTOR_DIR_L,MOTOR_DIR   ; motor up for normal direction option
+	
+    banksel flags
+	btfss	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
+    goto    jM1
+
+    banksel MOTOR_DIR_L
+    bsf     MOTOR_DIR_L,MOTOR_DIR   ; motor up for reverse direction option
+    
+jM1:
 
     nop
     nop
     nop
+    banksel MOTOR_STEP_L
+    bcf     MOTOR_STEP_L,MOTOR_STEP
+    nop
+    nop
+    bsf     MOTOR_STEP_L,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
-    bcf     MOTOR_STEP_P,MOTOR_STEP
-    nop
-    nop
-    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+    banksel flags
 
     call    decDepth        ; going up decrements the position by one step distance
 
@@ -3284,18 +3319,28 @@ chk_dwnJM:
 
 ; jog down button press
 
-    bsf     MOTOR_DIR_P,MOTOR_DIR   ; motor down for normal direction option
-	btfsc	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
-    bcf     MOTOR_DIR_P,MOTOR_DIR   ; motor up for reverse direction option
+    banksel MOTOR_DIR_L
+    bsf     MOTOR_DIR_L,MOTOR_DIR   ; motor down for normal direction option
+    
+    banksel flags
+	btfss	flags,MOTOR_DIR_MODE    ; is motor direction option reverse?
+    goto    jM2
+
+    banksel MOTOR_DIR_L
+    bcf     MOTOR_DIR_L,MOTOR_DIR   ; motor up for reverse direction option
+
+jM2:
 
     nop
     nop
     nop
+    banksel MOTOR_STEP_L
+    bcf     MOTOR_STEP_L,MOTOR_STEP
+    nop
+    nop
+    bsf     MOTOR_STEP_L,MOTOR_STEP ; pulse motor controller step line to advance motor one step
 
-    bcf     MOTOR_STEP_P,MOTOR_STEP
-    nop
-    nop
-    bsf     MOTOR_STEP_P,MOTOR_STEP ; pulse motor controller step line to advance motor one step
+    banksel flags
 
     call    incDepth        ; going down increments the position by one step distance
 
@@ -3369,9 +3414,10 @@ displayJM:
 
 exitJM:
 
-    bcf     POWER_ON_P,POWER_ON    ;  turn off the cutting voltage
+    banksel POWER_ON_L
+    bcf     POWER_ON_L,POWER_ON    ;  turn off the cutting voltage
 
-    call    waitLCD         ; wait until buffer printed
+    call    waitLCD                 ; wait until buffer printed
 
     return
 
@@ -5335,6 +5381,9 @@ setup:
 
     call    readPWMValsFrmEEpromSendLEDPIC
 
+    banksel MOTOR_ENABLE_L
+    bcf     MOTOR_ENABLE_L, MOTOR_ENABLE    ; enable the motor
+
     ; set up the LCD buffer variables
 
     banksel LCDFlags
@@ -5352,9 +5401,6 @@ setup:
 	bsf	    INTCON,PEIE	    ; enable peripheral interrupts (Timer0 is a peripheral)
     bsf     INTCON,T0IE     ; enable TMR0 interrupts
     bsf     INTCON,GIE      ; enable all interrupts
-
-    banksel MOTOR_ENABLE_P
-    bcf     MOTOR_ENABLE_P, MOTOR_ENABLE    ; enable the motor
 
     call    resetLCD        ; resets the LCD PIC and positions at line 1 column 1
 
