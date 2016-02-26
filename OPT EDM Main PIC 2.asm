@@ -174,38 +174,43 @@
 ;
 ; Function by Pin
 ;
-; Port A
+; Port A        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
-; RA0   In  - serial data in line -- com link to other devices
-; RA1   In  - unused
-; RA2   xxx - not implemented in PIC16f1459
-; RA3   In  - short detect
-; RA4   In  - cutting current high limit trigger
-; RA5   Out - cutting current power supply on/off
-; RA6   xxx - not implemented in PIC16f1459
-; RA7   xxx - not implemented in PIC16f1459
+; RA0   I/*,IOC,USB-D+                  ~ In ~ Jog Down switch input
+; RA1   I/*,IOC,USB-D-                  ~ In ~ unused, pulled high
+; RA2   not implemented in PIC16f1459   ~ 
+; RA3   I/*,IOC,T1G,MSSP-SS,Vpp,MCLR    ~ In ~ Vpp, short detect
+; RA4   I/O,IOC,T1G,CLKOUT,CLKR, AN3    ~ In ~ cutting current high limit trigger
+; RA5   I/O,IOC,T1CKI,CLKIN             ~ Out ~ cutting current power supply on/off
+; RA6   not implemented in PIC16f1459
+; RA7   not implemented in PIC16f1459
 ;
-; Port B
+; On version 1.0, RA0 is connected to Serial_Data_To_Local_PICs and RB5 is connected to the
+; Jog Down switch. Those boards are modified with jumpers so that the EUSART RX on RB5 can be used
+; to read serial data. From version 1.1 forward, the boards are redesigned and do not need
+; modification.
 ;
-; RB0   xxx - not implemented in PIC16f1459
-; RB1   xxx - not implemented in PIC16f1459
-; RB2   xxx - not implemented in PIC16f1459
-; RB3   xxx - not implemented in PIC16f1459
-; RB4   I/O - I2CSDA
-; RB5   In  - Jog Down Switch
-; RB6   Out - I2CSCL
-; RB7   Out - serial data out line -- com link to other devices
+; Port B        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
-; Port C
+; RB0   not implemented in PIC16f1459
+; RB1   not implemented in PIC16f1459
+; RB2   not implemented in PIC16f1459
+; RB3   not implemented in PIC16f1459
+; RB4   I/O,IOC,MSSP-SDA/SDI,AN10       ~ I ~ I2CSDA, I2C bus data line
+; RB5   I/O,IOC,EUSART-RX/DX,AN11       ~ I ~ EUSART-RX, serial port data in
+; RB6   I/O,IOC,MSSP-SCL/SCK            ~ I ~ I2CSCL, I2C bus clock line
+; RB7   I/O,IOC,EUSART-TX/CK            ~ O ~ EUSART-TX, serial port data out
 ;
-; RC0   Out - motor enable
-; RC1   In  - Mode Switch
-; RC2   In  - Jog Up Switch
-; RC3   Out - motor direction
-; RC4   Out - motor step
-; RC5   In  - cutting current low limit trigger
-; RC6   Out - Motor Mode Step Size - (Microstep Select Full/Half/Quarter/Eighth)
-; RC7   In  - Select Switch
+; Port C        Pin/Options/Selected Option/Description  (only the most common options are listed)
+;
+; RC0   I/O,AN4,C1/2IN+,ICSPDAT,Vref    ~ Out ~ ICSPDAT ~ in circuit programming data, Motor Enable
+; RC1   I/O,AN5,C1/2IN1-,ICSPCLK,INT    ~ In  ~ ICSPCLK ~ in circuit programming clock, Mode Switch
+; RC2   I/O,AN6,C1/2IN2-,DACOUT1        ~ In  ~ Jog Up Switch
+; RC3   I/O,AN7,C1/2IN3-,DACOUT2,CLKR   ~ Out ~ Motor Direction
+; RC4   I/O,C1/2OUT                     ~ Out ~ Motor Step
+; RC5   I/O,T0CKI,PWM1                  ~ In  ~ cutting current low limit trigger
+; RC6   I/O,AN8,PWM2,MSSP-SS            ~ Out ~ Motor Mode Step Size
+; RC7   I/O,AN9,MSSP-SDO                ~ In ~ Select switch
 ;
 ;end of Hardware Control Description
 ;--------------------------------------------------------------------------------------------------
@@ -232,7 +237,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-;#define debug 1     ; set debug testing "on" ;//DEBUG HSS -- comment this out later
+;#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -360,8 +365,8 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 
 ; Port A
 
-SERIAL_IN_P     EQU     PORTA
-SERIAL_IN       EQU     RA0         ; input ~ RA0 can only be input on PIC16f1459
+JOG_DWN_SW_P    EQU     PORTA
+JOG_DWN_SW      EQU     RA0         ; input ~ RA0 can only be input on PIC16f1459 ~ Jog Down Switch
 UNUSED_RA1_P    EQU     PORTA
 UNUSED_RA1      EQU     RA1         ; input ~ RA1 can only be input on PIC16f1459
 ;NA_RA2         EQU     RA2         ; RA2 not implemented on PIC16f1459
@@ -377,11 +382,7 @@ POWER_ON        EQU     RA5         ; output
 ; Port B
 
 I2CSDA_LINE     EQU     RB4
-JOG_DWN_SW_P    EQU     PORTB
-JOG_DWN_SW      EQU     RB5         ; input
 I2CSCL_LINE     EQU     RB6
-SERIAL_OUT_L    EQU     LATB
-SERIAL_OUT      EQU     RB7         ; output ~ serial data out to other devices
 
 ; Port C
 
@@ -460,16 +461,33 @@ MOTOR_DIR_MODE	EQU     0x7
 
 ; bits in flags2 variable
 
+HEADER_BYTE_1_RCVD  EQU 0
+HEADER_BYTE_2_RCVD  EQU 1
+LENGTH_BYTE_VALID   EQU 2
+SERIAL_PACKET_READY EQU 3
+
+; bits in flags3 variable
+
 EROSION_MODE    EQU     0x0
 
+; bits in statusFlags variable
 
-; bits in LCDFlags
+SERIAL_COM_ERROR    EQU 0
+I2C_COM_ERROR       EQU 1
 
-LCDBusy         EQU     0x00
-startBit        EQU     0x01
-stopBit         EQU     0x02
-endBuffer       EQU     0x03
-inDelay         EQU     0x04
+SERIAL_RCV_BUF_LEN  EQU .10
+
+SERIAL_XMT_BUF_LEN  EQU .64
+
+; Serial Port Packet Commands
+
+NO_ACTION_CMD               EQU .0
+ACK_CMD                     EQU .1
+SET_OUTPUTS_CMD             EQU .2
+SWITCH_STATES_CMD           EQU .3
+LCD_DATA_CMD                EQU .4
+LCD_INSTRUCTION_CMD         EQU .5
+LCD_BLOCK_CMD               EQU .6
 
 ; LCD Display Commands
 
@@ -503,6 +521,8 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock 0x20                ; starting address
 
+; WARNING: flags, flags2, and flags3 should all be contiguous for eeprom saving/loading
+
     flags                   ; bit 0: 0 = standard mode, 1 = extended cut depth mode
                             ; bit 1: 0 = cut not started, 1 = cut started
                             ; bit 2: 0 = depth not reached, 1 = depth reached
@@ -512,7 +532,16 @@ BLINK_ON_FLAG			EQU		0x01
 							; bit 6: 0 = no update direction symbol, 1 = update (used by various functions)
 							; bit 7: 0 = normal motor rotation, 1 = reverse motor direction
 
-    flags2                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
+    flags2                  ; bit 0: 1 = first serial port header byte received
+                            ; bit 1: 1 = second serial port header byte received
+                            ; bit 2: 1 = serial port packet length byte received and validated
+                            ; bit 3: 1 = data packet ready for processing
+                            ; bit 4: 0 =
+                            ; bit 5: 0 =
+							; bit 6: 0 =
+							; bit 7: 0 =
+
+    flags3                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
                             ; bit 1:
                             ; bit 2:
                             ; bit 3:
@@ -521,7 +550,18 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit 6:
                             ; bit 7:
 
+    statusFlags             ; bit 0: 0 = one or more com errors from serial have occurred
+                            ; bit 1: 0 = one or more com errors from I2C have occurred
+                            ; bit 2: 0 =
+                            ; bit 3: 0 =
+                            ; bit 4: 0 =
+                            ; bit 5: 0 =
+							; bit 6: 0 =
+							; bit 7: 0 =
+
     menuOption              ; tracks which menu option is currently selected
+
+    switchStates            ; debug mks -- replaces buttonState?
 
     buttonState                  
                             ; bit 0: 0 = Select/Reset/Zero/Enter button pressed
@@ -605,6 +645,30 @@ BLINK_ON_FLAG			EQU		0x01
 	cycleTestRetract0		; debug mks - use a scratch variable instead?
 	cycleTestRetract1		; debug mks - use a scratch variable instead?
 
+	; next variables ONLY written to by interrupt code
+
+	intScratch0				; scratch pad variable for exclusive use by interrupt code
+
+	; end of variables ONLY written to by interrupt code
+
+    serialPortErrorCnt      ; number of com errors from Rabbit via serial port
+    slaveI2CErrorCnt        ; number of com errors from Slave PICs via I2C bus
+
+    usartScratch0
+    usartScratch1
+    serialIntScratch0
+    
+    serialRcvPktLen
+    serialRcvPktCnt
+    serialRcvBufPtrH
+    serialRcvBufPtrL
+    serialRcvBufLen
+    
+    serialXmtBufNumBytes
+    serialXmtBufPtrH
+    serialXmtBufPtrL
+    serialXmtBufLen
+
  endc
 
 ;-----------------
@@ -614,88 +678,17 @@ BLINK_ON_FLAG			EQU		0x01
 
  cblock 0xa0                ; starting address
 
-    LCDFlags                ; bit 0: 0 = LCD buffer not busy, 1 = buffer busy
-                            ; bit 1: 0 = start bit not due, 1 = transmit start bit next
-                            ; bit 2: 0 = stop bit not due,  1 = transmit stop bit next
-                            ; bit 3: 0 = not buffer end,  1 = buffer end reached
-                            ; bit 4: 0 = not delaying, 1 = delaying
-    LCDScratch0             ; scratch pad variable
+    serialRcvBuf:SERIAL_RCV_BUF_LEN
 
-    LCDBitCount             ; tracks bits of byte being transmitted to LCD
-    LCDBufferCnt            ; number of characters in the buffer
-    
-    LCDBufferPtrH           ; points to next byte in buffer to be transmitted to LCD 
-    LCDBufferPtrL
-    
-    LCDDelay1               ; delay counter for providing necessary time delay between
-    LCDDelay0               ;    chars
+    serialXmtBuf:SERIAL_XMT_BUF_LEN
+ 
+    endc
 
-    LCDBuffer0              ; LCD display buffer - holds string being transmitted to the LCD
-    LCDBuffer1
-    LCDBuffer2
-    LCDBuffer3
-    LCDBuffer4
-    LCDBuffer5
-    LCDBuffer6
-    LCDBuffer7
-    LCDBuffer8
-    LCDBuffer9
-    LCDBuffera
-    LCDBufferb
-    LCDBufferc
-    LCDBufferd
-    LCDBuffere
-    LCDBufferf
-    LCDBuffer10
-    LCDBuffer11
-    LCDBuffer12
-    LCDBuffer13
-    LCDBuffer14
-    LCDBuffer15
-    LCDBuffer16
-    LCDBuffer17
-    LCDBuffer18
-    LCDBuffer19
-    LCDBuffer1a
-    LCDBuffer1b
-    LCDBuffer1c
-    LCDBuffer1d
-    LCDBuffer1e
-    LCDBuffer1f
-    LCDBuffer20
-    LCDBuffer21
-    LCDBuffer22
-    LCDBuffer23
-    LCDBuffer24
-    LCDBuffer25
-    LCDBuffer26
-    LCDBuffer27
-    LCDBuffer28
-    LCDBuffer29
-    LCDBuffer2a
-    LCDBuffer2b
-    LCDBuffer2c
-    LCDBuffer2d
-    LCDBuffer2e
-    LCDBuffer2f
-    LCDBuffer30
-    LCDBuffer31
-    LCDBuffer32
-    LCDBuffer33
-    LCDBuffer34
-    LCDBuffer35
-    LCDBuffer36
-    LCDBuffer37
-    LCDBuffer38
-    LCDBuffer39
-    LCDBuffer3a
-    LCDBuffer3b
-    LCDBuffer3c
-    LCDBuffer3d
-    LCDBuffer3e
-    LCDBuffer3f
-
- endc
+; Compute address of serialXmtBuf in linear data memory for use as a large buffer
+XMT_BUF_OFFSET EQU (serialXmtBuf & 0x7f) - 0x20
+SERIAL_XMT_BUF_LINEAR_ADDRESS   EQU ((serialXmtBuf/.128)*.80)+0x2000+XMT_BUF_OFFSET
+SERIAL_XMT_BUF_LINEAR_LOC_H     EQU high SERIAL_XMT_BUF_LINEAR_ADDRESS
+SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
 
 ;-----------------
 
@@ -796,8 +789,9 @@ BLINK_ON_FLAG			EQU		0x01
     eeTarget1
     eeTarget0
 
-    eeFlags
+    eeFlags             ; flags2 not useful to save, but is in between flags and flags3, so...
     eeFlags2
+    eeFlags3
 
     eeSparkLevelNotch       ; NOTE: keep eeSparkLevelNotch and eeSparkLevelWall contiguous
     eeSparkLevelWall
@@ -833,7 +827,7 @@ BLINK_ON_FLAG			EQU		0x01
 ; bank.
 
     clrf    STATUS          ; set to known state
-    clrf    PCLATH          ; set to bank 0 where the ISR is located
+    movlp   high handleInterrupt
     goto    handleInterrupt ; points to interrupt service routine
 
 ; end of Reset Vectors
@@ -853,7 +847,7 @@ menuLoop:
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
 
-    call    doMainMenu      ; display and handle the main menu
+        call    doMainMenu      ; display and handle the main menu
 
     goto    menuLoop
     
@@ -962,7 +956,10 @@ saveSparkLevelsToEEprom:
 ;--------------------------------------------------------------------------------------------------
 ; saveFlagsToEEprom
 ;
-; Saves the flags and flags2 values to eeprom.
+; Saves the flags, flags2, and flags3 values to eeprom.
+;
+; The flags2 variable does not contain values which need to be saved, but it is between flags
+; and flags3 so it is easier to save it than to skip it. 
 ;
 
 saveFlagsToEEprom:
@@ -977,8 +974,8 @@ saveFlagsToEEprom:
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount     ; write 2 bytes
+    movlw   .3
+    movwf   eepromCount     ; write 3 bytes
     call    writeToEEprom
 
     return
@@ -1032,173 +1029,6 @@ savePWMValuesToEEprom:
     return
 
 ; end of savePWMValuesToEEprom
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; handleInterrupt
-;
-; All interrupts call this function.  The interrupt flags must be polled to determine which
-; interrupts actually need servicing.
-;
-; Note that after each interrupt type is handled, the interrupt handler returns without checking
-; for other types.  If another type has been set, then it will immediately force a new call
-; to the interrupt handler so that it will be handled.
-;
-; NOTE NOTE NOTE
-; It is important to use no (or very few) subroutine calls.  The stack is only 8 deep and
-; it is very bad for the interrupt routine to use it.
-;
-;TMR0 is never reloaded -- thus it wraps around and does a full count for each interrupt.
-;
-
-handleInterrupt:
-
-	btfsc 	INTCON,T0IF     		; Timer0 overflow interrupt?
-	goto 	handleTimer0Interrupt	; YES, so process Timer0
-           
-; Not used at this time to make interrupt handler as small as possible.
-;	btfsc 	INTCON, RBIF      		; NO, Change on PORTB interrupt?
-;	goto 	portB_interrupt       	; YES, Do PortB Change thing
-
-INT_ERROR_LP1:		        		; NO, do error recovery
-	;GOTO INT_ERROR_LP1      		; This is the trap if you enter the ISR
-                               		; but there were no expected interrupts
-
-endISR:
-
-	retfie                  	; Return and enable interrupts
-
-; end of handleInterrupt
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; handleTimer0Interrupt
-;
-; This function is called when the Timer0 register overflows.
-;
-; NOTE NOTE NOTE
-; It is important to use no (or very few) subroutine calls.  The stack is only 8 deep and
-; it is very bad for the interrupt routine to use it.
-;
-
-handleTimer0Interrupt:
-
-	bcf 	INTCON,T0IF     ; clear the Timer0 overflow interrupt flag
-
-    banksel debounce0
-
-    movf    debounce0,W		; if debounce counter is zero, don't decrement it
-    iorwf   debounce1,W
-    btfsc   STATUS,Z
-    goto    doLCD
-
-    decf	debounce0,F     ; count down debounce timer
-    btfsc   STATUS,Z		; not perfect count down - Z flag set one count before roll-under
-    decf    debounce1,F
-
-doLCD:
-
-    banksel LCDFlags        ; select data bank 1 to access LCD buffer variables
-
-    btfss   LCDFlags,LCDBusy    
-    goto    endISR          ; if nothing in buffer, exit
-
-    btfss   LCDFlags,inDelay    ; if in delay phase, waste time until counter is zero
-    goto    startBitCheck       ;  (this delay is necessary between words, but is used
-                                ;    between every byte for simplicity)
-
-    decfsz  LCDDelay0,F         ; decrement (actually decrements upper byte when lower byte reaches 0
-    goto    endISR              ;   instead of just past 0, but accurate enough for this purpose)
-    decfsz  LCDDelay1,F
-    goto    endISR
-
-    bcf     LCDFlags,inDelay    ; delay ended
-
-    bsf     LCDFlags,startBit   ; transmit start bit on next interrupt
-    
-    btfss   LCDFlags,endBuffer  ; buffer empty?
-    goto    endISR
-
-    clrf    LCDFlags            ; if end of buffer reached, set LCD not busy
-    movlw   high LCDBuffer0     ; reset pointer to beginning of the buffer
-    movwf   LCDBufferPtrH
-    movlw   low LCDBuffer0
-    movwf   LCDBufferPtrL    
-        
-    clrf    LCDBufferCnt        ; no characters in the buffer
-
-    goto    endISR
-
-startBitCheck:
-
-    btfss   LCDFlags,startBit   ; if set, initiate a startbit and exit    
-    goto    stopBitCheck
-
-    banksel SERIAL_OUT_L
-    bcf     SERIAL_OUT_L,SERIAL_OUT ; transmit start bit (low)
-
-    banksel LCDFlags
-
-    bcf     LCDFlags,startBit   ; start bit done
-    movlw   .8
-    movwf   LCDBitCount         ; prepare to send 8 bits starting with next interrupt
-    goto    endISR    
-
-stopBitCheck:
-
-    btfss   LCDFlags,stopBit    ; if set, initiate a stopbit and exit
-    goto    transmitByteT0I
-
-    banksel SERIAL_OUT_L
-    bsf     SERIAL_OUT_L, SERIAL_OUT           ; transmit stop bit (high)
-
-    banksel LCDFlags
-    
-    bcf     LCDFlags,stopBit    ; stop bit done
-    
-    movlw   0x30                ; don't use less than 1 here - will count from 0xff
-    movwf   LCDDelay0
-    movlw   0x01                ; don't use less than 1 here - will count from 0xff
-    movwf   LCDDelay1           ; setup delay
-    bsf     LCDFlags,inDelay    ; start delay on next interrupt
-    
-    goto    endISR    
-
-transmitByteT0I:
-
-    movf    LCDBufferPtrH,W     ; get pointer to next character to be transmitted
-    movwf   FSR0H
-    movf    LCDBufferPtrL,W
-    movwf   FSR0L
-    rlf     INDF0,F             ; get the first bit to transmit
-
-    banksel SERIAL_OUT_L
-    bcf     SERIAL_OUT_L,SERIAL_OUT ; set data line low first (brief low if bit is to be a one will
-                                    ; be ignored by receiver)
-    btfsc   STATUS,C
-    bsf     SERIAL_OUT_L,SERIAL_OUT ; set high if bit was a 1
-
-    banksel LCDFlags
-
-endOfByteCheck:
-
-    decfsz  LCDBitCount,F       ; count number of bits to transmit
-    goto    endISR
-
-    bsf     LCDFlags,stopBit    ; signal to transmit stop bit on next interrupt
-
-    incf    LCDBufferPtrL,F     ; point to next character in buffer
-    btfsc   STATUS,Z
-    incf    LCDBufferPtrH,F
-    
-    decfsz  LCDBufferCnt,F      ; buffer empty?
-    goto    endISR
-
-    bsf     LCDFlags,endBuffer  ; signal to stop transmitting after next stop bit
-
-    goto    endISR
-
-; end of handleTimer0Interrupt
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -1343,6 +1173,117 @@ zeroDepth:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; setupLCDBlockPkt
+;
+; Prepares the serial transmit buffer with header, length byte of 3, and command LCD_BLOCK_CMD.
+; The data to be sent can then be added to the packet.
+;
+; Before the packet is transmitted, the length byte should be replaced with the actual number of
+; bytes which have been added to the packet.
+;
+; On Entry:
+;
+; On Exit:
+;
+; packet is stuffed with header, length value of 3, and command byte
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+
+setupLCDBlockPkt:
+
+    movlw   LCD_BLOCK_CMD               ; prepare to write a block of data to LCD
+    
+    movlp   high setupSerialXmtPkt
+    call    setupSerialXmtPkt
+    movlp   setupLCDBlockPkt
+
+    banksel flags
+
+    return
+
+; end of setupLCDBlockPkt
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; printStringWaitPrep
+;
+; Prints the string pointed to by FSR1.  The string is placed after any data already in the print
+; buffer.
+;
+; All data in the buffer is then begun to be transmitted to the LCD.
+;
+; Waits for transmission to be completed.
+;
+; Setups up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
+;  packet).
+;
+; On entry:
+;
+; FSR1 points to the desired string
+;
+; After placing the string characters in the LCD print buffer, the buffer is flushed to force
+; transmission of the buffer.  Any characters placed in the buffer before the string will also
+; be printed, so place control codes in the buffer first and then call this function to print
+; everything.
+;
+
+printStringWaitPrep:
+
+    call    printString
+    call    waitSerialXmtComplete   ; wait until buffer printed
+
+    call    setupLCDBlockPkt
+
+    return
+
+; end of printStringWaitPrep
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; flushXmtWaitPrep
+;
+; Starts transmission of the serial transmit buffer and then waits until the entire buffer has been
+; sent and is ready for more data.
+;
+; Setups up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
+;  packet).
+;
+
+flushXmtWaitPrep:
+    
+    movlp   startSerialPortTransmit
+    call    startSerialPortTransmit
+
+    movlp   waitSerialXmtComplete
+    call    waitSerialXmtComplete
+
+    call    setupLCDBlockPkt
+
+    return
+
+; end of flushXmtWaitPrep
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitXmtPrep
+;
+; Waits until the entire serial transmit buffer has been sent and is ready for more data.
+;
+; Setups up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
+;  packet).
+;
+
+waitXmtPrep:
+
+    call    waitSerialXmtComplete
+
+    call    setupLCDBlockPkt
+
+    return
+
+; end of waitXmtPrep
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; doExtModeMenu
 ;
 ; Displays and handles the Standard / Extended depth mode menu.
@@ -1377,7 +1318,7 @@ zeroDepth:
 
 doExtModeMenu:
 
-	; call here to default to option 1
+    ; call here to default to option 1
 
     movlw   0x94
     movwf   cursorPos       ; option 1 highlighted
@@ -1388,21 +1329,21 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+
     movlw   high string0   ; "OPT AutoNotcher x.x"
     movwf   FSR1H
     movlw   low string0
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
-    
-    movlw   0xc0	    ; set position for writeControl to line 2, column 1
+    call    printStringWaitPrep     ; print the string and wait until done
+
+    movlw   0xc0            ; set position for writeControl to line 2, column 1
     call    writeControl    ; position at line 2 column 1
     movlw   high string1    ; "CHOOSE CONFIGURATION"
     movwf   FSR1H
     movlw   low string1
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
     
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
@@ -1410,8 +1351,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1H
     movlw   low string2
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
@@ -1419,15 +1359,14 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1H
     movlw   low string3
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
 ; position the cursor on the default selection
     
     movf    cursorPos,W		; load the cursor position to highlight the current choice
     call    writeControl    ; write line 3 column 1
     call    turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 ; scan for button inputs, highlight selected option, will return when Reset/Enter/Zero pressed
 
@@ -1458,7 +1397,7 @@ LoopDEMM1:
     
     ; copy value for the standard tool to the inches/motor step variable
 
-    btfsc   flags2,EROSION_MODE
+    btfsc   flags3,EROSION_MODE
     goto    useStdErosionFactor
 
     movlw   high stdNoErosion   ; source is constant in program memory -- no erosion factor
@@ -1500,7 +1439,7 @@ skipDEMM6:
 
     ; copy value for the extended tool to the inches/motor step variable
 
-    btfsc   flags2,EROSION_MODE
+    btfsc   flags3,EROSION_MODE
     goto    useExtErosionFactor
 
     movlw   high extNoErosion   ; source is constant in program memory -- no erosion factor
@@ -1591,6 +1530,8 @@ doMainMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+
     call    clearScreen     ; clear the LCD screen (next print will flush this to LCD)
     
     btfsc  flags,EXTENDED_MODE  ; check for extended mode
@@ -1602,8 +1543,7 @@ doMainMenuA:				; call here if default option has already been set by caller
     movwf   FSR1H
     movlw   low string4
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
     goto    skipDMM    
 
 extendedModeDMM:
@@ -1614,8 +1554,7 @@ extendedModeDMM:
     movwf   FSR1H
     movlw   low string13
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
 skipDMM:
 
@@ -1632,24 +1571,22 @@ skipDMM:
     movwf   FSR1H
     movlw   low string5
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
-    
+    call    printStringWaitPrep     ; print the string and wait until done
+
     goto    skipString6
 
 ; if target depth already set (!=0), display the target depth value
 
 skipString5:
 
-    movlw   high string6    ; "1 - Depth = "
+    movlw   high string6            ; "1 - Depth = "
     movwf   FSR1H
     movlw   low string6
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
     
-    call    displayTarget   ; display the target depth to cut
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    displayTarget           ; display the target depth to cut
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 skipString6:
 
@@ -1660,8 +1597,7 @@ skipString6:
     movwf   FSR1H
     movlw   low string7
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xd4
     call    writeControl    ; position at line 4 column 1
@@ -1670,15 +1606,14 @@ skipString6:
     movwf   FSR1H
     movlw   low string8
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
 ;position the cursor on the default selection
 
     movf    cursorPos,W		; load the cursor position to highlight the current choice
     call    writeControl    ; position at line 2 column 1
 	call	turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 loopDMM1:
 
@@ -1793,6 +1728,8 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
 
 ;print the strings of the menu
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+
     call    clearScreen     ; clear the LCD screen (next print will flush this to LCD)
 
 ; display the first option
@@ -1801,15 +1738,13 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
     movwf   FSR1H
     movlw   low string21
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    printStringWaitPrep     ; print the string and wait until done
     
     movlw   high string19   ; "Cycle Test"
     movwf   FSR1H
     movlw   low string19
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
 ; display the second option
 
@@ -1820,8 +1755,7 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
     movwf   FSR1H
     movlw   low string20
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     btfsc  	flags,MOTOR_DIR_MODE    ; check for reverse motor direction
 	goto	revDirDMMP2
@@ -1830,8 +1764,8 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
     movwf   FSR1H
     movlw   low string22
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    printStringWaitPrep     ; print the string and wait until done
+
     goto    option3DMMP2
 
 revDirDMMP2:
@@ -1840,8 +1774,7 @@ revDirDMMP2:
     movwf   FSR1H
     movlw   low string23
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    printStringWaitPrep     ; print the string and wait until done
 
 ; display the third option
 
@@ -1854,18 +1787,17 @@ option3DMMP2:
     movwf   FSR1H
     movlw   low string24
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
-    btfsc  	flags2,EROSION_MODE    ; check erosion mode
+    btfsc  	flags3,EROSION_MODE    ; check erosion mode
 	goto	useErosionDMMP2
 
     movlw   high string25   ; add "None" suffix to erosion line
     movwf   FSR1H
     movlw   low string25
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    printStringWaitPrep     ; print the string and wait until done
+
     goto    placeCursorDMMP2
 
 useErosionDMMP2:
@@ -1874,8 +1806,7 @@ useErosionDMMP2:
     movwf   FSR1H
     movlw   low string26
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed (can't use printString again before this)
+    call    printStringWaitPrep     ; print the string and wait until done
 
 placeCursorDMMP2:
 
@@ -1884,7 +1815,7 @@ placeCursorDMMP2:
     movf    cursorPos,W		; load the cursor position to highlight the current choice
     call    writeControl    ; position at line 1 column 1
 	call	turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 loopDMMP21:
 
@@ -1940,17 +1871,17 @@ skipDMMP24:
 
     ; handle option 6 - Erosion Change (menuOption value is 3)
 
-    btfss	flags2,EROSION_MODE     ; erosion factor is 17%?
+    btfss	flags3,EROSION_MODE     ; erosion factor is 17%?
 	goto	skipDMMP25
 
-	bcf		flags2,EROSION_MODE     ; set erosion factor to none
+	bcf		flags3,EROSION_MODE     ; set erosion factor to none
     ;//WIP HSS// -- actually update step values and set depth to 0
 	call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP25:
 
-	bsf		flags2,EROSION_MODE     ; set erosion mode to 17%
+	bsf		flags3,EROSION_MODE     ; set erosion mode to 17%
     ;//WIP HSS// -- actually update step values and set depth to 0
     call    saveFlagsToEEprom       ; save the new setting to EEprom
     goto    doMainMenuPage2         ; refresh menu
@@ -2013,6 +1944,8 @@ skipDMMP27:
 
 cutNotch:
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+
     movlw   0x0
     movwf   scratch1
     movlw   0xff
@@ -2024,8 +1957,7 @@ cutNotch:
     movwf   FSR1H
     movlw   low string14
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
     call    setupCutNotchAndCycleTest	; finish the screen setup
 
@@ -2151,12 +2083,16 @@ quickRetractCN:
 
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCN
-    banksel LCDFlags
-    btfsc   LCDFlags,LCDBusy
+
+    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
+    movf    serialXmtBufNumBytes,W
+    btfss   STATUS,Z
 	goto    skipDirSymUpdateCN
 
     banksel flags
-	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
+	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while quick retracting
+
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
  
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
@@ -2166,9 +2102,10 @@ quickRetractCN:
     call    writeControl    ; position at line 3 column 1
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
-    call    flushLCD        ; force buffer to print, but don't wait because jogging is time
-                            ; critical
-
+    movlp   high startSerialPortTransmit
+    call    startSerialPortTransmit ; force buffer to print, don't wait as jogging is time critical
+    movlp   high skipDirSymUpdateCN
+    
 skipDirSymUpdateCN:
 
     banksel LO_LIMIT_P
@@ -2180,10 +2117,9 @@ skipDirSymUpdateCN:
 
 displayPosLUCL:             		; updates the display if it is time to do so
 
-    banksel LCDFlags
-
-    btfss   LCDFlags,LCDBusy
-    goto    displayCN
+    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
+    movf    serialXmtBufNumBytes,W
+    btfss   STATUS,Z
     goto    checkPositionCN 		; don't display if print buffer not ready      
 
 displayCN:
@@ -2193,6 +2129,8 @@ displayCN:
     bcf     flags,UPDATE_DISPLAY 	; clear flag so no update until data changed again
 
     ; display asterisk at "Up" or "Down" label depending on blade direction or erase if no movement
+
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
 
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
@@ -2208,14 +2146,15 @@ displayCN:
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
-    call    flushLCD        ; force buffer to print, but don't wait because jogging is time
-                            ; critical
-    
-    ; compare position with desired cut depth, exit when reached
+    movlp   high startSerialPortTransmit
+    call    startSerialPortTransmit ; force buffer to print, but don't wait because jogging is time
+                                    ; critical
+    movlp   checkPositionCN
 
-checkPositionCN:
+checkPositionCN:        ; compare position with desired cut depth, exit when reached
 
     call    isDepthGreaterThanTarget ; Check to see if depth >= target 
+    banksel flags
     bcf     flags,AT_DEPTH
     btfsc   STATUS,C
     bsf     flags,AT_DEPTH  ; if isDepthGreaterThanTarget returned C=1, depth reached so set flag
@@ -2227,8 +2166,9 @@ exitCN:
     banksel POWER_ON_L
     bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
-    call    waitLCD                 ; wait until buffer printed
+    call    waitXmtPrep            ; wait until buffer printed
 
+    banksel flags
     btfsc   flags,DATA_MODIFIED     ; if data has been modified, save to eeprom
     call    saveSparkLevelsToEEprom
 
@@ -2255,11 +2195,10 @@ setupCutNotchAndCycleTest:
     movwf   FSR1H
     movlw   low string15
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     call    displaySpeedAndPower    ; display the current advance speed and power level
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     movlw   0x95
     call    writeControl    ; position at line 3 column 2
@@ -2268,8 +2207,7 @@ setupCutNotchAndCycleTest:
     movwf   FSR1H
     movlw   low string16
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
     call    displayTarget   ; display the target depth to cut
 
@@ -2285,9 +2223,9 @@ setupCutNotchAndCycleTest:
     call    writeControl    ; position at line 4 column 12
     call    displayPos      ; display the location of the head relative to the zero point
 
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
-	return
+    return
 
 ; end of setupCutNotchAndCycleTest
 ;--------------------------------------------------------------------------------------------------
@@ -2329,8 +2267,7 @@ cycleTest:
     movwf   FSR1H
     movlw   low string19
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed    
+    call    printStringWaitPrep     ; print the string and wait until done
 
 	call	setupCutNotchAndCycleTest	; finish the screen setup
 
@@ -2432,10 +2369,11 @@ quickRetractCT:
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCT
 
-    banksel LCDFlags
 
-    btfsc   LCDFlags,LCDBusy
-	goto    skipDirSymUpdateCT
+    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
+    movf    serialXmtBufNumBytes,W
+    btfss   STATUS,Z
+    goto    skipDirSymUpdateCT 		; don't display if transmit buffer not empty
 
     banksel flags
 	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
@@ -2448,8 +2386,8 @@ quickRetractCT:
     call    writeControl    ; position at line 3 column 1
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
-    call    flushLCD        ; force buffer to print, but don't wait because jogging is time
-                            ; critical
+    call    startSerialPortTransmit ; force buffer to print, but don't wait because jogging is time
+                                    ; critical
 
 skipDirSymUpdateCT:
 
@@ -2473,7 +2411,7 @@ exitCT:
     banksel POWER_ON_L
     bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
-    call    waitLCD         ; wait until buffer printed
+    call    waitXmtPrep            ; wait until buffer printed
 
     return
 
@@ -2702,7 +2640,7 @@ updateAS:
 
 wallModeAS:
 
-    movlw   high sparkLevelWall  ; transfer value to Notch variable
+    movlw   high sparkLevelWall  ; transfer value to Wall variable
     movwf   FSR0H
     movlw   low sparkLevelWall
     movwf   FSR0L
@@ -2722,9 +2660,8 @@ processValueAS:
     movwf   sparkLevel      ; store value in sparkLevel
     movwf   INDF0           ; store value in appropriate variable
  
-    bsf     flags,DATA_MODIFIED ; set flag so values will be saved
-
-    bsf     flags,UPDATE_DISPLAY ; set flag so display will be updated
+    bsf     flags,DATA_MODIFIED     ; set flag so values will be saved
+    bsf     flags,UPDATE_DISPLAY    ; set flag so display will be updated
 
     movlw   0x45            ; start the switch debounce timer at 0x1245
     movwf   debounce0
@@ -2765,7 +2702,7 @@ adjustPowerUp:
     goto    updateAP        ; display the digit
 
     movlw   .1
-    movwf   powerLevel      ; roll around if limti reached
+    movwf   powerLevel      ; roll around if limit reached
 
     goto    updateAP        ; display the digit
 
@@ -2812,6 +2749,8 @@ apuExit:
     call    setLowCurrentLimitDigitalPot
 
     banksel flags
+    
+    bsf     flags,DATA_MODIFIED             ; set flag so values will be saved
     bsf     flags,UPDATE_DISPLAY            ; set flag so display will be updated
 
     movlw   0x45                            ; start the switch debounce timer at 0x1245
@@ -2965,8 +2904,7 @@ setTarget:
     movwf   FSR1H
     movlw   low string9
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
@@ -2974,8 +2912,7 @@ setTarget:
     movwf   FSR1H
     movlw   low string10
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
@@ -2989,8 +2926,7 @@ setTarget:
     
     movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xc4
     call    writeControl    ; position back at line 2 column 4
@@ -3000,7 +2936,7 @@ setTarget:
     movlw   0xc4
     call    writeControl
 	call	turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 ; handle editing
 
@@ -3037,7 +2973,7 @@ loopSD:
     movf    cursorPos,W
     call    writeControl
     call    turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     goto    loopSD
 
@@ -3077,13 +3013,12 @@ setCutMode:
     
     movwf   FSR1L	    ; put the low of either string17 or string18 -- depends on mode
    
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0x94
     call    writeControl
 	call	turnOnBlink
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 loopSCM:
 
@@ -3211,7 +3146,7 @@ updateABD:
     call    writeControl
 	call	turnOnBlink
 
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
     
     goto    loopABD         ; continue editing
     
@@ -3235,6 +3170,8 @@ jogMode:
 
 ; set up the display
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+    
     call    clearScreen     ; clear the LCD screen
 
     movlw   0x86
@@ -3243,8 +3180,7 @@ jogMode:
     movwf   FSR1H
     movlw   low string11
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xc4
     call    writeControl    ; position at line 2 column 4
@@ -3252,8 +3188,7 @@ jogMode:
     movwf   FSR1H
     movlw   low string12
     movwf   FSR1L
-    call    printString     ; print the string
-    call    waitLCD         ; wait until buffer printed
+    call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   0xe5
     call    writeControl    ; position at line ? column 6
@@ -3263,7 +3198,7 @@ jogMode:
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     movlw   0x0
     movwf   scratch1
@@ -3365,11 +3300,12 @@ not_dwnJM:
 
     call    zeroDepth       ; clear the depth position variable
 
-    call    waitLCD         ; wait until print buffer is empty    
+    call    waitXmtPrep     ; wait until buffer printed
+
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the position
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     goto    loopJM          ; stay in jog mode after zeroing
 
@@ -3390,9 +3326,9 @@ updateJM:
 
 noExtraDelayJM:
 
-    banksel LCDFlags
-
-    btfss   LCDFlags,LCDBusy
+    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
+    movf    serialXmtBufNumBytes,W
+    btfsc   STATUS,Z
     goto    displayJM
 
     banksel flags
@@ -3403,21 +3339,25 @@ displayJM:
 
     banksel flags
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
+    
     movlw   0xdf
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
-    call    flushLCD        ; force buffer to print, but don't wait because jogging is time
-                            ; critical
+    movlp   high startSerialPortTransmit
+    call    startSerialPortTransmit ; force buffer to print, don't wait as jogging is time critical
+    movlp   high displayJM                                   
+                                    
+    banksel flags
 
     goto    loopJM          ; stay in jog mode
-
 
 exitJM:
 
     banksel POWER_ON_L
     bcf     POWER_ON_L,POWER_ON    ;  turn off the cutting voltage
 
-    call    waitLCD                 ; wait until buffer printed
+    call    waitXmtPrep             ; wait until buffer printed
 
     return
 
@@ -3475,8 +3415,6 @@ negativeDP:
 ; clearScreen
 ;
 ; Clears the LCD screen.
-;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
 ;
 
 clearScreen:
@@ -3610,7 +3548,7 @@ moveCursorSHO:
     movlw   0x94            ; move cursor up one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     return
 
@@ -3624,7 +3562,7 @@ line2SHO:
     movlw   0xc0            ; move cursor up one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
 
@@ -3638,7 +3576,7 @@ line3SHO:
     movlw   0x80            ; move cursor up one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
 
@@ -3705,7 +3643,7 @@ moveCursorSLO:
     movlw   0xc0            ; move cursor down one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     return
 
@@ -3719,7 +3657,7 @@ line2SLO:
     movlw   0x94            ; move cursor down one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
 
@@ -3733,7 +3671,7 @@ line3SLO:
     movlw   0xd4            ; move cursor down one line
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
-    call    flushAndWaitLCD ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
 
@@ -4083,27 +4021,27 @@ isDepthGreaterThanTarget:
     
     movf    depthSign,W     ; load the sign byte (affects Z flag but not C)
     btfss   STATUS,Z        ; if set, depth < target because depth sign is negative
-        return              ; return C=0 because depth < target
+    return                  ; return C=0 because depth < target
 
     movf    depth10,W      ; compare next least significant digits
     subwf   target10,W
     btfss   STATUS,C        ; if set, depth < target
-        return              ; return C=1 because depth > target
+    return                  ; return C=1 because depth > target
     
     movf    depth9,W       ; compare next least significant digits
     subwf   target9,W
     btfss   STATUS,C        ; if set, depth < target
-        return              ; return C=1 because depth > target
+    return                  ; return C=1 because depth > target
     
     movf    depth8,W       ; compare next least significant digits
     subwf   target8,W
     btfss   STATUS,C        ; if set, depth < target
-        return              ; return C=1 because depth > target
+    return                  ; return C=1 because depth > target
     
     movf    depth7,W       ; compare next least significant digits
     subwf   target7,W
     btfss   STATUS,C        ; if set, depth < target
-        return              ; return C=1 because depth > target
+    return                  ; return C=1 because depth > target
     
     movf    depth6,W       ; compare next least significant digits
     subwf   target6,W
@@ -4559,9 +4497,17 @@ loopPS:
     
     moviw   FSR1++
 
-    btfsc   STATUS,Z
-    goto    flushLCD        ; force printing of the buffer    
-    
+    btfss   STATUS,Z
+    goto    pS1
+
+    movlp   startSerialPortTransmit
+    call    startSerialPortTransmit     ; force buffer to print
+    movlp   printString
+    banksel flags
+    return
+
+pS1:
+
     call    writeChar       ; write the character to the LCD print buffer
     
     goto    loopPS          ; loop until length of string reached 
@@ -4570,70 +4516,43 @@ loopPS:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; flushLCD
+; waitSerialXmtComplete
 ;
-; Forces the data in the LCD print buffer to start transmission to the LCD.
-;
-;
-
-flushLCD:
-
-; prepare the interrupt routine for printing
-
-    banksel LCDBuffer0
-
-    movlw   high LCDBuffer0     ; reset pointer to beginning of the buffer
-    movwf   LCDBufferPtrH
-    movlw   low LCDBuffer0
-    movwf   LCDBufferPtrL    
-    
-    bsf     LCDFlags,startBit
-    bsf     LCDFlags,LCDBusy    ; set this bit last to make sure everything set up before interrupt
-
-    banksel flags
-
-    return
-
-; end of flushLCD
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; waitLCD
-;
-; Waits until the LCD buffer has been transmitted to the LCD and is ready for more data.
+; Waits until the serial transmit buffer has been sent and is ready for more data.
 ;
 
-waitLCD:
+waitSerialXmtComplete:
 
-    banksel LCDFlags
+    banksel serialXmtBufNumBytes
 
 loopWBL1:                   ; loop until interrupt routine finished writing character
 
-    btfsc   LCDFlags,LCDBusy
+    movf    serialXmtBufNumBytes,W
+    btfss   STATUS,Z
     goto    loopWBL1
 
     banksel flags
 
     return
 
-; end of waitLCD
+; end of waitSerialXmtComplete
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; flushAndWaitLCD
+; flushAndWaitSerialXmt
 ;
-; Forces the data in the LCD print buffer to start transmission to the LCD then waits until the LCD
-; buffer has been transmitted to the LCD and is ready for more data.
+; Starts transmission of the serial transmit buffer and then waits until the entire buffer has been
+; sent and is ready for more data.
 ;
 
-flushAndWaitLCD:
+flushAndWaitSerialXmt:
 
-    call    flushLCD
-    call    waitLCD    
+    call    startSerialPortTransmit ; start serial buffer transmission
+    call    waitSerialXmtComplete
 
     return
 
-; end of flushAndWaitLCD
+; end of flushAndWaitSerialXmt
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -4688,17 +4607,15 @@ turnOnBlink:
 ;--------------------------------------------------------------------------------------------------
 ; writeChar
 ;
-; Writes an ASCII character to the LCD : writes 0x0 to the LCD, then writes byte in W to LCD.
-; This is stored in the LCD print buffer after any data already in the buffer.
+; Writes an ASCII character to the serial transmit buffer : writes 0x00 followed by the byte in W.
+; This is stored after any data already in the buffer.
 ;
 ; On entry:
 ;
 ; W contains byte to write
 ;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
-;
-; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
-; this function, call flushLCD or printString to flush the buffer.
+; NOTE: The data is placed in the buffer but is not submitted to be sent.  After using this
+; function, call startSerialPortTransmit or printString to initiate transmission.
 ;
 
 writeChar:
@@ -4707,7 +4624,7 @@ writeChar:
 
     clrf    scratch1        ; scratch1 = 0
 
-    call    writeWordLCD    ; write 0 followed by scratch0 to LCD
+    call    writeWordToSerialXmtBuf     ; write 0 followed by scratch0 to LCD
     
     return
 
@@ -4717,19 +4634,15 @@ writeChar:
 ;--------------------------------------------------------------------------------------------------
 ; writeControl
 ;
-; Writes a control code to the LCD PIC : sends 0x1 to the LCD PIC, then sends byte in W.
-;
-; These values are stored in the LCD print buffer after any data already in the buffer and
-; transmitted by another function.
+; Writes an LCD control code to the serial transmit buffer : writes 0x01 followed by the byte in W.
+; This is stored after any data already in the buffer.
 ;
 ; On entry:
 ;
 ; W contains byte to write
 ;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
-;
-; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
-; this function, call flushLCD or printString to flush the buffer.
+; NOTE: The data is placed in the buffer but is not submitted to be sent.  After using this
+; function, call startSerialPortTransmit or printString to initiate transmission.
 ;
 
 writeControl:
@@ -4739,7 +4652,7 @@ writeControl:
     movlw   0x1
     movwf   scratch1        ; scratch1 = 1
     
-    call    writeWordLCD    ; write 1 followed by scratch0 to LCD
+    call    writeWordToSerialXmtBuf         ; write 1 followed by scratch0 to transmit buffer
 
     return
 
@@ -4747,77 +4660,75 @@ writeControl:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; writeWordLCD
+; writeWordToSerialXmtBuf
 ; 
-; This subroutine writes the word in scratch1:0 to the LCD screen.
+; This subroutine writes the word in scratch1:0 to the serial transmit buffer.
 ;
 ; On entry:
 ; 
 ; scratch1 contains first byte to write
 ; scratch0 contains second byte to write
 ;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
-;
-; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
-; this function, call flushLCD or printString to flush the buffer.
+; NOTE: The data is placed in the buffer but is not submitted to be sent.  After using this
+; function, call startSerialPortTransmit or printString to initiate transmission.
 ;
 
-writeWordLCD:
+writeWordToSerialXmtBuf:
     
-    movf    scratch1,W      ; get first byte to write
-    call    writeByteLCD
+    movf    scratch1,W                  ; get first byte to write
+    call    writeByteToSerialXmtBuf
 
-    movf    scratch0,W      ; get second byte to write
-    call    writeByteLCD    ;(0x68b)
+    movf    scratch0,W                  ; get second byte to write
+    call    writeByteToSerialXmtBuf
     
     return
 
-; end of writeWordLCD
+; end of writeWordToSerialXmtBuf
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; writeByteLCD
+; writeByteToSerialXmtBuf
 ;
-; This subroutine writes the byte in W to the LCD screen.
+; This subroutine writes the byte in W to the serial transmit buffer.
 ;
 ; On entry:
 ; 
 ; W contains byte to write
 ;
-; Uses W, TMR0, OPTION_REG, scratch2, scratch3, LCDscratch
-;
-; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
-; this function, call flushLCD or printString to flush the buffer.
+; NOTE: The data is placed in the buffer but is not submitted to be sent.  After using this
+; function, call startSerialPortTransmit or printString to initiate transmission.
 ;
 
-writeByteLCD:
+writeByteToSerialXmtBuf:
 
-    banksel LCDScratch0
+    banksel scratch2
+    movwf   scratch2                        ; store character
 
-    movwf   LCDScratch0         ; store character
-
-    movf    LCDBufferPtrH,W     ; get pointer to next buffer position
+    banksel serialXmtBufPtrH                ; load FSR0 with buffer pointer
+    movf    serialXmtBufPtrH, W
     movwf   FSR0H
-    movf    LCDBufferPtrL,W
+    movf    serialXmtBufPtrL, W
     movwf   FSR0L
 
-    movf    LCDScratch0,W   ; retrieve character
+    movf    scratch2,W                      ; retrieve character
 
-    movwf   INDF0           ; store character in buffer
+    movwf   INDF0                           ; store character in buffer
 
-    incf    LCDBufferCnt,F  ; count characters placed in the buffer
+    banksel serialXmtBufNumBytes            ; increment packet byte count
+    incf    serialXmtBufNumBytes,f
 
-    incf    LCDBufferPtrL,F     ; point to next character in buffer
+    banksel serialXmtBufPtrH
+    incf    serialXmtBufPtrL,F              ; point to next buffer position
     btfsc   STATUS,Z
-    incf    LCDBufferPtrH,F
+    incf    serialXmtBufPtrH,F
     
     banksel flags
 
     return    
-
-; end of writeByteLCD
+ 
+; end of writeByteToSerialXmtBuf
 ;--------------------------------------------------------------------------------------------------
-
+ 
 ;--------------------------------------------------------------------------------------------------
 ; writeToEeprom
 ;
@@ -5323,6 +5234,8 @@ setup:
 
     call    setupPortC      ; prepare Port C  for I/O
 
+    call    setupSerialPort ; prepare serial port for sending and receiving
+
     call    initializeOutputs
 
     call    setupI2CMaster7BitMode ; prepare the I2C serial bus for use
@@ -5383,22 +5296,10 @@ setup:
 
     banksel MOTOR_ENABLE_L
     bcf     MOTOR_ENABLE_L, MOTOR_ENABLE    ; enable the motor
-
-    ; set up the LCD buffer variables
-
-    banksel LCDFlags
-
-    clrf    LCDFlags        
-    movlw   high LCDBuffer0
-    movwf   LCDBufferPtrH
-    movlw   low LCDBuffer0
-    movwf   LCDBufferPtrL
-
-    clrf    LCDBufferCnt    ; no characters in the buffer
 	
 ; enable the interrupts
 
-	bsf	    INTCON,PEIE	    ; enable peripheral interrupts (Timer0 is a peripheral)
+	bsf	    INTCON,PEIE	    ; enable peripheral interrupts (Timer0 and serial port are peripherals)
     bsf     INTCON,T0IE     ; enable TMR0 interrupts
     bsf     INTCON,GIE      ; enable all interrupts
 
@@ -5478,7 +5379,7 @@ setupPortA:
 
     ; set direction for each pin used
 
-    bsf     TRISA, SERIAL_IN            ; input
+    bsf     TRISA, JOG_DWN_SW           ; input    
     bsf     TRISA, SHORT_DETECT         ; input
     bsf     TRISA, HI_LIMIT             ; input
     bcf     TRISA, POWER_ON             ; output
@@ -5511,8 +5412,6 @@ setupPortB:
     banksel LATB                        ; init port data latch
     clrf    LATB
 
-    bsf     LATB,SERIAL_OUT             ; initialize SERIAL_OUT high before changing pin to output
-                                        ; so a start bit won't be transmitted
     banksel ANSELB
     clrf    ANSELB                      ; setup port for all digital I/O
 
@@ -5521,9 +5420,6 @@ setupPortB:
     banksel TRISB
     movlw   b'11111111'                 ; first set all to inputs
     movwf   TRISB
-
-    bsf     TRISB, JOG_DWN_SW           ; input
-    bcf     TRISB, SERIAL_OUT           ; output
 
     return
 
@@ -5577,14 +5473,11 @@ setupPortC:
 ;
 ; Initializes all outputs to known values.
 ;
-; Write to port latches to avoid problems with read-modify-write when changing multiple outputs
-; in quick succession.
+; Write to port latches to avoid problems with read-modify-write modifying port bits due to
+; line noise.
 ;
 
 initializeOutputs:
-
-    banksel LATB
-    bsf     LATB,SERIAL_OUT
 
     banksel LATA
     bcf     LATA, POWER_ON
@@ -5702,7 +5595,7 @@ setDigitalPots:
 ;--------------------------------------------------------------------------------------------------
 ; readFlagsFromEEprom
 ;
-; Reads the flags and flags2 values from eeprom.
+; Reads the flags, flags2, and flags3 values from eeprom.
 ;
 
 readFlagsFromEEprom:
@@ -5717,8 +5610,8 @@ readFlagsFromEEprom:
     clrf    eepromAddressH
     movlw   eeFlags         ; address in EEprom
     movwf   eepromAddressL
-    movlw   .2
-    movwf   eepromCount     ; read 2 bytes
+    movlw   .3
+    movwf   eepromCount     ; read 3 bytes
     call    readFromEEprom
 
     return
@@ -6084,6 +5977,9 @@ readByteFromEEprom1ViaI2C:
 
 resetLCD:
     
+    movlp   high setupLCDBlockPkt
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD
+
     movlp   high writeControl   ; readies the PCLATH for the calls below
 
     movlw   CLEAR_SCREEN_CMD
@@ -6092,7 +5988,7 @@ resetLCD:
     movlw   0x80
     call    writeControl        ; position at line 1 column 1
 
-    call    flushAndWaitLCD     ; force the LCD buffer to print and wait until done
+    call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     movlp   high resetLCD       ; set PCLATH back to what it was on entry
     
@@ -6303,6 +6199,864 @@ dF1Loop:
     return
 
 ; end of debugFunc1
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleSwitchStatesPacket
+;
+; Stores the switch states byte in switchStates for access by the program. The switchStates variable
+; reflects the on/off state of the various switches.
+;
+; On Entry:
+;
+;   FSR0 points to serialRcvBuf
+; 
+
+handleSwitchStatesPacket:
+
+    moviw   1[FSR0]                     ; get the switch state value from the packet
+
+    banksel switchStates
+    movwf   switchStates                ; store the switch states
+
+    return
+
+; end of handleSwitchStatesPacket
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleReceivedDataIfPresent
+;
+; Processes data in the serial receive buffer if a packet has been received.
+;
+
+handleReceivedDataIfPresent:
+
+    banksel flags2                          ; handle packet in serial receive buffer if ready
+    btfsc   flags2, SERIAL_PACKET_READY
+    goto    handleSerialPacket
+
+    return
+
+; end of handleReceivedDataIfPresent
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleSerialPacket
+;
+; Processes a packet in the serial receive buffer.
+;
+
+handleSerialPacket:
+
+    ;verify the checksum
+
+    banksel flags2
+
+    movf    serialRcvPktLen, W          ; copy number of bytes to variable for counting
+    movwf   serialRcvPktCnt
+
+    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movwf   FSR0H
+    movlw   low serialRcvBuf
+    movwf   FSR0L
+
+    clrw                                ; preload W with zero
+
+hspSumLoop:
+
+    addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
+    incf    FSR0L, F
+    decfsz  serialRcvPktCnt, F
+    goto    hspSumLoop
+
+    movf    WREG, F                         ; test for zero
+    btfsc   STATUS, Z                       ; error if not zero
+    goto    parseCommandFromSerialPacket    ; checksum good so handle command
+
+hspError:
+
+    incf    serialPortErrorCnt, F           ; track errors
+    bsf     statusFlags,SERIAL_COM_ERROR
+
+    goto    resetSerialPortRcvBuf
+
+; end of handleSerialPacket
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; parseCommandFromSerialPacket
+;
+; Parses the command byte in a serial packet and performs the appropriate action.
+;
+; On Entry:
+;
+; On Exit:
+;
+; FSR0 points to serialRcvBuf
+;
+
+parseCommandFromSerialPacket:
+
+    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movwf   FSR0H
+    movlw   low serialRcvBuf
+    movwf   FSR0L
+
+; parse the command byte by comparing with each command
+
+    movf    INDF0,W
+    sublw   SWITCH_STATES_CMD
+    btfsc   STATUS,Z
+    goto    handleSwitchStatesPacket
+
+;    movf    INDF0,W
+;    sublw   ???        -- use this example for a future command
+;    btfsc   STATUS,Z
+;    goto    handleLCDInstructionPacket
+
+    goto    resetSerialPortRcvBuf
+
+; end of parseCommandFromSerialPacket
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupSerialXmtPkt
+;
+; Prepares the serial transmit buffer with header, a length byte of 3 and the command byte. The
+; data to be sent can then be added to the packet.
+;
+; The default length of 3 is useful for many LCD commands which require 2 data bytes and a
+; checksum. The length can be adjusted before transmission.
+;
+; On Entry:
+;
+; W contains the packet command.
+;
+; On Exit:
+;
+; packet is stuffed with header, command, and length value of 3.
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+;
+
+setupSerialXmtPkt:
+
+    banksel usartScratch0
+
+    movwf   usartScratch1       ; store the command byte
+    
+    movlw   .3
+    movwf   usartScratch0       ; default number of data bytes plus checksum byte
+                                ;       can be changed before transmission
+
+    goto    setUpSerialXmtBuf
+
+; end of setupSerialXmtPkt
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+;--------------------------------------------------------------------------------------------------
+;   EUSART Serial Port Core Functions
+;
+; Copy this block of code for all basic functions required for serial transmit. Build code, then
+; copy all variables and defines which are shown to be missing.
+;
+;--------------------------------------------------------------------------------------------------
+; setUpSerialXmtBuf
+;
+; Adds the header bytes, length byte, command byte, and various values from this Master PIC to the
+; start of the serial port transmit buffer and sets serialXmtBufPtrH:L ready to add data bytes.
+;
+; Notes on packet length:
+;
+;   Example with 1 data bytes...
+;
+;   2 bytes (command byte + data byte)
+;   ---
+;   2 total (value passed to calcAndStoreCheckSumSerPrtXmtBuf; number bytes checksummed)
+;
+;   ADD (to determine length byte to insert into packet)
+;
+;   +1 checksum byte for the overall packet
+;   3 total (value passed to setUpSerialXmtBuffer (this function) for packet length)
+;
+;   ADD (to determine actual number of bytes to send)
+;
+;   +2 header bytes
+;   +1 length byte
+;   ---
+;   6 total (value passed to startSerialPortTransmit)
+;
+; On Entry:
+;
+; usartScratch0 should contain the number of data bytes plus one for the checksum byte in the packet
+; usartScratch1 should contain the command byte
+;
+; On Exit:
+;
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+; serialXmtBufNumBytes will be zeroed
+
+setUpSerialXmtBuf:
+
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_H                   ; set FSR0 to start of transmit buffer
+    movwf   FSR0H
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_L
+    movwf   FSR0L
+
+    banksel usartScratch0
+
+    movlw   0xaa
+    movwi   FSR0++                          ; store first header byte
+
+    movlw   0x55
+    movwi   FSR0++                          ; store first header byte
+
+    movf    usartScratch0,W                 ; store length byte
+    movwi   FSR0++
+
+    movf    usartScratch1,W                 ; store command byte
+    movwi   FSR0++
+
+    banksel serialXmtBufPtrH                ; point serialXmtBufPtrH:L at next buffer position
+    movf    FSR0H,W
+    movwf   serialXmtBufPtrH
+    movf    FSR0L,W
+    movwf   serialXmtBufPtrL
+
+    clrf   serialXmtBufNumBytes             ; tracks number of bytes added -- must be adjusted
+                                            ; later to include the header bytes, length, command
+
+    return
+
+; end of setUpSerialXmtBuf
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; startSerialPortTransmit
+;
+; Initiates sending of the bytes in the transmit buffer. The transmission will be performed by an
+; interrupt routine.
+;
+; The command byte and all following data bytes are used to compute the checksum which is inserted
+; at the end.
+;
+; On Entry:
+;
+; serialXmtBufNumBytes should contain the number of bytes to send.
+; The bytes to be sent should be in the serial port transmit buffer serialXmtBuf.
+;
+
+startSerialPortTransmit:
+
+    ; get number of bytes stored in buffer, add one for the command byte, calculate checksum
+
+    banksel serialXmtBufNumBytes
+    movf    serialXmtBufNumBytes,W
+    addlw   .1
+    movwf   serialXmtBufNumBytes
+    movwf   usartScratch0
+
+    call    calcAndStoreCheckSumSerPrtXmtBuf
+
+    banksel serialXmtBufPtrH                ; set FSR0 and pointer to start of transmit buffer
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_H
+    movwf   serialXmtBufPtrH
+    movwf   FSR0H
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_L
+    movwf   serialXmtBufPtrL
+    movwf   FSR0L
+
+    ; add 1 to length to account for checksum byte, store in packet length byte
+    ;  packet length = command byte + data bytes + checksum
+
+    banksel serialXmtBufNumBytes
+    movf    serialXmtBufNumBytes,W
+    addlw   .1
+    movwi   2[FSR0]
+
+    ; add 3 to length to account for two header bytes and length byte, store for xmt routine
+    ; this is the total number of bytes to transmit
+
+    addlw   .3
+    movwf   serialXmtBufNumBytes
+
+    banksel PIE1                            ; enable transmit interrupts
+    bsf     PIE1, TXIE                      ; interrupt will trigger when transmit buffers empty
+
+    return
+
+; end of startSerialPortTransmit
+;--------------------------------------------------------------------------------------------------
+ 
+;--------------------------------------------------------------------------------------------------
+; clearSerialPortXmtBuf
+;
+; Sets all bytes up to 255 in the Serial Port transmit buffer to zero. If the buffer is larger
+; than 255 bytes, only the first 255 will be zeroed.
+;
+
+clearSerialPortXmtBuf:
+
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_H                   ; set FSR0 to start of transmit buffer
+    movwf   FSR0H
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_L
+    movwf   FSR0L
+
+    banksel usartScratch0                       ; get buffer size to count number of bytes zeroed
+    movlw   SERIAL_XMT_BUF_LEN
+    movwf   usartScratch0
+
+    movlw   0x00
+
+cSPXBLoop:
+
+    movwi   FSR0++
+    decfsz  usartScratch0,F
+    goto    cSPXBLoop
+
+    return
+
+; end of clearSerialPortXmtBuf
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupSerialPort
+;
+; Sets up the serial port for communication.
+; Also prepares the receive and transmit buffers for use.
+;
+
+setupSerialPort:
+
+    banksel serialRcvBufLen     ;store buffer length constants in variables for easier maths
+
+    movlw   SERIAL_RCV_BUF_LEN
+    movwf   serialRcvBufLen
+    movlw   SERIAL_XMT_BUF_LEN
+    movwf   serialXmtBufLen
+
+    clrf    serialPortErrorCnt
+    bcf     statusFlags,SERIAL_COM_ERROR
+
+    ;set the baud rate to 57,600 (will actually be 57.97K with 0.64% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 68
+
+    banksel TXSTA
+    bsf     TXSTA, BRGH
+    banksel BAUDCON
+    bsf     BAUDCON, BRG16
+    banksel SPBRGH
+    clrf    SPBRGH
+    banksel SPBRGL
+    movlw   .68
+    movwf   SPBRGL
+
+    ;set UART mode and enable receiver and transmitter
+
+    banksel ANSELB          ; RB5/RB7 digital I/O for use as RX/TX
+    bcf     ANSELB,RB5
+    bcf     ANSELB,RB7
+
+    banksel TRISB
+    bsf     TRISB, TRISB5   ; set RB5/RX to input
+    bcf     TRISB, TRISB7   ; set RB7/TX to output
+
+    banksel TXSTA
+    bcf     TXSTA, SYNC     ; clear bit for asynchronous mode
+    bsf     TXSTA, TXEN     ; enable the transmitter
+    bsf     RCSTA, CREN     ; enable the receiver
+    bsf     RCSTA, SPEN     ; enable EUSART, configure TX/CK I/O pin as an output
+
+    call    resetSerialPortRcvBuf
+    call    resetSerialPortXmtBuf
+
+    ; enable the receive interrupt; the transmit interrupt (PIE1/TXIE) is not enabled until data is
+    ; ready to be sent
+    ; for interrupts to occur, INTCON/PEIE and INTCON/GIE must be enabled also
+
+    banksel PIE1
+    bsf     PIE1, RCIE      ; enable receive interrupts
+    bcf     PIE1, TXIE      ; disable transmit interrupts (re-enabled when data is ready to xmt)
+
+    return
+
+; end of setupSerialPort
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitForTXIFHigh
+;
+; Waits in a loop for TXIF bit in register PIR1 to go high. This signals that the EUSART serial
+; port transmit buffer is empty and a new byte can be sent.
+;
+
+waitForTXIFHigh:
+
+    ifdef debug_on    ; if debugging, don't wait for interrupt to be set high as the MSSP is not
+    return            ; simulated by the IDE
+    endif
+
+    banksel PIR1
+
+wfth1:
+    btfss   PIR1, TXIF
+    goto    wfth1
+
+    return
+
+; end of waitForTXIFHigh
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; resetSerialPortRcvBuf
+;
+; Resets all flags and variables associated with the serial port receive buffer.
+;
+
+resetSerialPortRcvBuf:
+
+    banksel flags2
+
+    bcf     flags2, HEADER_BYTE_1_RCVD
+    bcf     flags2, HEADER_BYTE_2_RCVD
+    bcf     flags2, LENGTH_BYTE_VALID
+    bcf     flags2, SERIAL_PACKET_READY
+
+    clrf    serialRcvPktLen
+    clrf    serialRcvPktCnt
+    movlw   high serialRcvBuf
+    movwf   serialRcvBufPtrH
+    movlw   low serialRcvBuf
+    movwf   serialRcvBufPtrL
+
+    banksel RCSTA           ; check for overrun error - must be cleared to receive more data
+    btfss   RCSTA, OERR
+    goto    RSPRBnoOERRError
+
+    bcf     RCSTA, CREN     ; clear error by disabling/enabling receiver
+    bsf     RCSTA, CREN
+
+RSPRBnoOERRError:
+
+    return
+
+; end of resetSerialPortRcvBuf
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; resetSerialPortXmtBuf
+;
+; Resets all flags and variables associated with the serial port transmit buffer.
+;
+
+resetSerialPortXmtBuf:
+
+    banksel flags2
+
+    clrf    serialXmtBufNumBytes
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_H
+    movwf   serialXmtBufPtrH
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_L
+    movwf   serialXmtBufPtrL
+
+    return
+
+; end of resetSerialPortXmtBuf
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; calcAndStoreCheckSumSerPrtXmtBuf
+;
+; Calculates the checksum for a series of bytes in the serial port transmit buffer. The two
+; header bytes and the length byte are not included in the checksum.
+;
+; On Entry:
+;
+; usartScratch0 contains number of bytes in series, not including the 2 header bytes and 1 length
+; byte
+;
+; On Exit:
+;
+; The checksum will be stored at the end of the series.
+; FSR0 points to the location after the checksum.
+;
+
+calcAndStoreCheckSumSerPrtXmtBuf:
+
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_H                   ; set FSR0 to start of transmit buffer
+    movwf   FSR0H
+    movlw   SERIAL_XMT_BUF_LINEAR_LOC_L
+    movwf   FSR0L
+
+    addfsr  FSR0,.3                             ; skip 2 header bytes and 1 length byte
+                                                ; command byte is part of checksum
+
+    goto    calculateAndStoreCheckSum
+
+; end calcAndStoreCheckSumSerPrtXmtBuf
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; calculateAndStoreCheckSum
+;
+; Calculates the checksum for a series of bytes.
+;
+; On Entry:
+;
+; usartScratch0 contains number of bytes in series
+; FSR0 points to first byte in series.
+;
+; On Exit:
+;
+; The checksum will be stored at the end of the series.
+; FSR0 points to the location after the checksum.
+;
+
+calculateAndStoreCheckSum:
+
+    call    sumSeries                       ; add all bytes in the buffer
+
+    comf    WREG,W                          ; use two's complement to get checksum value
+    addlw   .1
+
+    movwi   FSR0++                          ; store the checksum at the end of the summed series
+
+    return
+
+; end calculateAndStoreCheckSum
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; sumSeries
+;
+; Calculates the sum of a series of bytes. Only the least significant byte of the sum is retained.
+;
+; On Entry:
+;
+; usartScratch0 contains number of bytes in series.
+; FSR0 points to first byte in series.
+;
+; On Exit:
+;
+; The least significant byte of the sum will be returned in WREG.
+; Z flag will be set if the LSB of the sum is zero.
+; FSR0 points to the location after the last byte summed.
+;
+
+sumSeries:
+
+    banksel usartScratch0
+
+    clrf    WREG
+
+sumSLoop:                       ; sum the series
+
+    addwf   INDF0,W
+    addfsr  INDF0,1
+
+    decfsz  usartScratch0,F
+    goto    sumSLoop
+
+    return
+
+; end sumSeries
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleInterrupt
+;
+; All interrupts call this function.  The interrupt flags must be polled to determine which
+; interrupts actually need servicing.
+;
+; Note that after each interrupt type is handled, the interrupt handler returns without checking
+; for other types.  If another type has been set, then it will immediately force a new call
+; to the interrupt handler so that it will be handled.
+;
+; NOTE NOTE NOTE
+; It is important to use no (or very few) subroutine calls.  The stack is only 16 deep and
+; it is very bad for the interrupt routine to use it.
+;
+
+handleInterrupt:
+
+                                    ; INTCON is a core register, no need to banksel
+	btfsc 	INTCON, T0IF     		; Timer0 overflow interrupt?
+	goto 	handleTimer0Int
+
+    banksel PIR1
+
+    btfsc   PIR1, RCIF              ; serial port receive interrupt?
+    goto    handleSerialPortReceiveInt
+
+    btfsc   PIR1, TXIF              ; serial port transmit interrupt?
+    goto    handleSerialPortTransmitInt
+
+
+; Not used at this time to make interrupt handler as small as possible.
+;	btfsc 	INTCON, RBIF      		; NO, Change on PORTB interrupt?
+;	goto 	portB_interrupt       	; YES, Do PortB Change thing
+
+INT_ERROR_LP1:		        		; NO, do error recovery
+	;GOTO INT_ERROR_LP1      		; This is the trap if you enter the ISR
+                               		; but there were no expected interrupts
+
+endISR:
+
+	retfie                  	; Return and enable interrupts
+
+; end of handleInterrupt
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleTimer0Int
+;
+; This function is called when the Timer0 register overflows.
+;
+; TMR0 is never reloaded -- thus it wraps around and does a full count for each interrupt.
+;
+; NOTE NOTE NOTE
+; It is important to use no (or very few) subroutine calls.  The stack is only 16 deep and
+; it is very bad for the interrupt routine to use it.
+;
+
+handleTimer0Int:
+
+	bcf 	INTCON,T0IF     ; clear the Timer0 overflow interrupt flag
+
+    banksel debounce0
+
+    movf    debounce0,W		; if debounce counter is zero, don't decrement it
+    iorwf   debounce1,W
+    btfsc   STATUS,Z
+    goto    noDebounceDec
+
+    decf	debounce0,F     ; count down debounce timer
+    btfsc   STATUS,Z		; not perfect count down - Z flag set one count before roll-under
+    decf    debounce1,F
+
+noDebounceDec:
+
+    retfie
+
+; end of handleTimer0Int
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleSerialPortReceiveInt
+;
+; This function is called when a byte(s) has been received by the serial port. The byte(s) will be
+; checked to see if it is a header byte, a packet length byte, or a data byte. Data bytes will be
+; stored in a buffer. If an error occurs in receiving a packet, the function will ignore data
+; received before the error and begin watching for the next packet signature. Upon receiving a
+; complete packet, a flag will be set to notify the main loop.
+;
+; The receive register is a two byte fifo, so two bytes could be ready. This function will process
+; all bytes available.
+;
+; The RCIF flag is cleared by reading all data from the two byte receive FIFO.
+;
+; This code check each byte sequence to see if it starts with a header prefix (0xaa,0x55) followed
+; by a valid length byte. If these are found, the bytes after the length byte are stored in a
+; buffer. If the sequence is not matched or the supposed length byte is larger than the buffer,
+; all flags are reset and the search for the first header byte starts over.
+;
+; Packet format:
+;   0xaa, 0x55, length, data1, data2, data3,...checksum.
+;
+; This interrupt function does not verify the checksum; the main loop should do that if required.
+; Once a packet has been received, a flag is set to alert the main loop that it is ready for
+; processing. All further data will be ignored until the main loop clears that flag. If an error
+; occurs, the data received to that point will be discarded and the search for the next packet
+; begun anew.
+;
+; The packet length byte is the number of data bytes plus one for the checksum byte. It does not
+; include the two header bytes or the length byte itself. If the length byte value is 0 or is
+; greater than the buffer size, the packet will be ignored. If the length byte value is greater
+; than the actual number of bytes sent (but still less than the buffer size), the current packet
+; AND the next packet(s) will be discarded as the interrupt routine will wait until enough bytes
+; are received from subsequent packets to equal the erroneously large length byte value.
+;
+; Thus, only one packet at a time can be handled. The processing required is typically minimal, so
+; the main loop should be able to process each packet before another is received. Some care should
+; be taken by the receiver to not flood the line with packets.
+;
+; The main loop does all the actual processing in order to minimize the overhead of the interrupt.
+;
+; NOTE NOTE NOTE
+; It is important to use no (or very few) subroutine calls.  The stack is only 16 deep and
+; it is very bad for the interrupt routine to use it.
+;
+
+handleSerialPortReceiveInt:
+
+    ; if the packet ready flag is set, ignore all data until main loop clears it
+
+    banksel flags2
+    btfss   flags2, SERIAL_PACKET_READY
+    goto    readSerialLoop
+
+    ; packet ready flag set means last packet still being processed, read byte to clear interrupt
+    ; or it will result in an endless interrupt loop, byte is tossed and a resync will occur
+
+    banksel RCREG
+    movf    RCREG, W
+    goto    rslExit
+
+    ;RCREG is a two byte FIFO and may contain two bytes; read until RCIF flag is clear
+
+readSerialLoop:
+
+    banksel RCREG
+    movf    RCREG, W        ; get byte from receive fifo
+
+    banksel flags2
+
+    btfsc   flags2, HEADER_BYTE_1_RCVD      ; header byte 1 already received?
+    goto    rsl1                            ; if so, check for header byte 2
+
+    bsf     flags2, HEADER_BYTE_1_RCVD      ; preset the flag, will be cleared on fail
+
+    sublw   0xaa                            ; check for first header byte of 0xaa
+    btfsc   STATUS, Z                       ; equal?
+    goto    rsllp                           ; continue on, leaving flag set
+
+    goto    rslError                        ; not header byte 1, reset all to restart search
+
+rsl1:
+    btfsc   flags2, HEADER_BYTE_2_RCVD      ; header byte 2 already received?
+    goto    rsl2                            ; if so, check for length byte
+
+    bsf     flags2, HEADER_BYTE_2_RCVD      ; preset the flag, will be cleared on fail
+
+    sublw   0x55                            ; check for second header byte of 0x55
+    btfsc   STATUS, Z                       ; equal?
+    goto    rsllp                           ; continue on, leaving flag set
+
+    goto    rslError                        ; not header byte 2, reset all to restart search
+
+rsl2:
+    btfsc   flags2, LENGTH_BYTE_VALID       ; packet length byte already received and validated?
+    goto    rsl3                            ; if so, jump to store data byte
+
+    movwf   serialRcvPktLen                 ; store the packet length
+    movwf   serialRcvPktCnt                 ; store it again to count down number of bytes stored
+
+    bsf     flags2, LENGTH_BYTE_VALID       ; preset the flag, will be cleared on fail
+
+    movf    serialRcvPktLen, F              ; check for invalid packet size of 0
+    btfsc   STATUS, Z
+    goto    rslError
+
+    subwf   serialRcvBufLen, W              ; check if packet length < buffer length
+    btfsc   STATUS, C                       ; carry cleared if borrow was required
+    goto    rsllp                           ; continue on, leaving flag set
+                                            ; if invalid length, reset all to restart search
+
+rslError:
+
+    incf    serialPortErrorCnt, F           ; track errors
+    bsf     statusFlags,SERIAL_COM_ERROR
+    call    resetSerialPortRcvBuf    
+    goto    rsllp
+
+rsl3:
+
+    movwf   serialIntScratch0               ; store the new character
+
+    movf    serialRcvBufPtrH, W             ; load FSR0 with buffer pointer
+    movwf   FSR0H
+    movf    serialRcvBufPtrL, W
+    movwf   FSR0L
+
+    movf    serialIntScratch0, W            ; retrieve the new character
+    movwi   INDF0++                         ; store in buffer
+
+    movf    FSR0H, W                        ; save adjusted pointer
+    movwf   serialRcvBufPtrH
+    movf    FSR0L, W
+    movwf   serialRcvBufPtrL
+
+    decfsz  serialRcvPktCnt, F              ; count down number of bytes stored
+    goto    rsllp                           ; continue collecting until counter reaches 0
+
+rsl4:
+
+    bsf     flags2, SERIAL_PACKET_READY     ; flag main loop that a data packet is ready
+    goto    rslExit
+
+rsllp:
+
+    banksel PIR1                            ; loop until receive fifo is empty
+    btfsc   PIR1, RCIF
+    goto    readSerialLoop
+
+rslExit:
+
+    banksel RCSTA           ; check for overrun error - must be cleared to receive more data
+    btfss   RCSTA, OERR
+    goto    noOERRError
+
+    bcf     RCSTA, CREN     ; clear error by disabling/enabling receiver
+    bsf     RCSTA, CREN
+
+noOERRError:
+
+    goto    endISR
+
+; end of handleSerialPortReceiveInt
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleSerialPortTransmitInt
+;
+; This function is called when a byte is to be transmitted to the host via serial port. After
+; data is placed in the transmit buffer, the TXIE flag is enabled so this routine gets called
+; as an interrupt whenever the transmit buffer is empty. After all bytes in the buffer have been
+; transmitted, this routine clears the TXIE flag to disable further interrupts.
+;
+; Before the TXIE flag is set to start the process, serialXmtBufNumBytes should be set to value
+; > 0, i.e. the number of valid bytes in the transmit buffer.
+;
+; NOTE NOTE NOTE
+; It is important to use no (or very few) subroutine calls.  The stack is only 16 deep and
+; it is very bad for the interrupt routine to use it.
+;
+; The TXIF flag is cleared in the second instruction cycle after writing data to TXREG.
+;
+
+handleSerialPortTransmitInt:
+
+    banksel serialXmtBufPtrH                ; load FSR0 with buffer pointer
+    movf    serialXmtBufPtrH, W
+    movwf   FSR0H
+    movf    serialXmtBufPtrL, W
+    movwf   FSR0L
+
+    moviw   FSR0++                          ; send next byte in buffer
+    banksel TXREG
+    movwf   TXREG
+
+    banksel serialXmtBufPtrH                ; store updated FSR0 in buffer pointer
+    movf    FSR0H, W
+    movwf   serialXmtBufPtrH
+    movf    FSR0L, W
+    movwf   serialXmtBufPtrL
+
+    decfsz  serialXmtBufNumBytes, F
+    goto    endISR                          ; more data to send, exit with interrupt still enabled
+
+    banksel PIE1                            ; no more data, disable further transmit interrupts
+    bcf     PIE1, TXIE
+
+    goto    endISR
+
+; end of handleSerialPortTransmitInt
+;--------------------------------------------------------------------------------------------------
+;
+;   End of EUSART Serial Port Core Functions
+;
+;--------------------------------------------------------------------------------------------------
 ;--------------------------------------------------------------------------------------------------
     
 ;--------------------------------------------------------------------------------------------------
