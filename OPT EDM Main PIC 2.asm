@@ -684,12 +684,18 @@ BLINK_ON_FLAG			EQU		0x01
  
     endc
 
+; Compute address of serialRcvBuf in linear data memory for use as a large buffer
+RCV_BUF_OFFSET EQU (serialRcvBuf & 0x7f) - 0x20
+SERIAL_RCV_BUF_LINEAR_ADDRESS   EQU ((serialRcvBuf/.128)*.80)+0x2000+RCV_BUF_OFFSET
+SERIAL_RCV_BUF_LINEAR_LOC_H     EQU high SERIAL_RCV_BUF_LINEAR_ADDRESS
+SERIAL_RCV_BUF_LINEAR_LOC_L     EQU low SERIAL_RCV_BUF_LINEAR_ADDRESS
+    
 ; Compute address of serialXmtBuf in linear data memory for use as a large buffer
 XMT_BUF_OFFSET EQU (serialXmtBuf & 0x7f) - 0x20
 SERIAL_XMT_BUF_LINEAR_ADDRESS   EQU ((serialXmtBuf/.128)*.80)+0x2000+XMT_BUF_OFFSET
 SERIAL_XMT_BUF_LINEAR_LOC_H     EQU high SERIAL_XMT_BUF_LINEAR_ADDRESS
 SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
-
+               
 ;-----------------
 
 ; Assign variables in RAM - Bank 3 - must set BSR to 3 to access
@@ -6256,9 +6262,9 @@ handleSerialPacket:
     movf    serialRcvPktLen, W          ; copy number of bytes to variable for counting
     movwf   serialRcvPktCnt
 
-    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_H ; point FSR0 at start of receive buffer
     movwf   FSR0H
-    movlw   low serialRcvBuf
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
     movwf   FSR0L
 
     clrw                                ; preload W with zero
@@ -6298,9 +6304,9 @@ hspError:
 
 parseCommandFromSerialPacket:
 
-    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_H     ; point FSR0 at start of receive buffer
     movwf   FSR0H
-    movlw   low serialRcvBuf
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
     movwf   FSR0L
 
 ; parse the command byte by comparing with each command
@@ -6625,9 +6631,9 @@ resetSerialPortRcvBuf:
 
     clrf    serialRcvPktLen
     clrf    serialRcvPktCnt
-    movlw   high serialRcvBuf
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_H
     movwf   serialRcvBufPtrH
-    movlw   low serialRcvBuf
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
     movwf   serialRcvBufPtrL
 
     banksel RCSTA           ; check for overrun error - must be cleared to receive more data
