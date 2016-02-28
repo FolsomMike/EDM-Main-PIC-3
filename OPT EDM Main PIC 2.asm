@@ -237,7 +237,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-;#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
+#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -861,6 +861,8 @@ start:
     movlp   high start
 
 menuLoop:
+
+    call    setCutMode   ;debug mks
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
 
@@ -3012,15 +3014,11 @@ endSD:
 ; the up or down switch is pressed (or toggled), the mode will flip.  Pressing the Reset/Enter
 ; button will save the mode and exit.
 ; 
-; wip mks - update Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState,
-;  buttonPrev, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
-; 
 
 setCutMode:
 
     movlw   0x94
     call    writeControl    ; position at line 3 column 1
-
     
     movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
     movwf   FSR1H
