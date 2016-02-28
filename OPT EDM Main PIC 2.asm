@@ -840,14 +840,14 @@ SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
 
 
 ; interrupt vector at 0x0004
-; NOTE: if PCLATH has bits set it will cause a jump into an unexpected program memory
-; bank.
 
-    clrf    STATUS          ; set to known state
+; NOTE: You must set PCLATH before jumping to the interrupt routine - if PCLATH is wrong the
+; jump will fail.
+ 
     movlp   high handleInterrupt
-    goto    handleInterrupt ; points to interrupt service routine
+    goto    handleInterrupt	; points to interrupt service routine
 
-; end of Reset Vectors
+    ; end of Reset Vectors
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
