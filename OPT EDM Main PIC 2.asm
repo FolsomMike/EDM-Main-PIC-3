@@ -296,6 +296,7 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
     
 ;LCD Screen Position Codes                
                 
+LINE1_COL1  EQU     0x80                
 LINE2_COL1  EQU     0xc0
 LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
@@ -1743,7 +1744,7 @@ doMainMenuPage2:
 
 	; call here to default to option 1
 
-    movlw   0x80
+    movlw   LINE1_COL1
     movwf   cursorPos       ; option 1 highlighted
     movlw   0x1
     movwf   menuOption      ; option 1 currently selected
@@ -3450,7 +3451,7 @@ clearScreen:
     movlw   CLEAR_SCREEN_CMD	; send Clear Display control code to the LCD
     call    writeControl    
     
-    movlw   0x80				; position cursor at line 1 column 1
+    movlw   LINE1_COL1          ; set display position
     call    writeControl    	
 
     return                  	; exit menu on error
@@ -3597,9 +3598,9 @@ line3SHO:
     btfss   STATUS,Z    
     goto    line4SHO
 
-    movlw   0x80            ; move cursor up one line
+    movlw   LINE1_COL1          ; move cursor up one line
     movwf   cursorPos
-    call    writeControl    ; write the cursor to the LCD
+    call    writeControl        ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
@@ -3659,7 +3660,7 @@ selectLowerOption:
 
 moveCursorSLO:
 
-    movlw   0x80
+    movlw   LINE1_COL1
     subwf   cursorPos,W     ; is cursor at 0x80?
     btfss   STATUS,Z    
     goto    line2SLO
@@ -6009,8 +6010,8 @@ resetLCD:
     movlw   CLEAR_SCREEN_CMD
     call    writeControl        ; send Clear Display control code to the LCD
 
-    movlw   0x80
-    call    writeControl        ; position at line 1 column 1
+    movlw   LINE1_COL1          ; set display position
+    call    writeControl
 
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
