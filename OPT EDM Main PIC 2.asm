@@ -297,11 +297,8 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 ;LCD Screen Position Codes                
                 
 LINE2_COL1  EQU     0xc0
-                
-  
-  
-  
-  
+LINE3_COL1  EQU     0x94
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -1346,7 +1343,7 @@ doExtModeMenu:
 
     ; call here to default to option 1
 
-    movlw   0x94
+    movlw   LINE3_COL1      ; set display position
     movwf   cursorPos       ; option 1 highlighted
     movlw   0x1
     movwf   menuOption      ; option 1 currently selected
@@ -1371,8 +1368,8 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
     
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
     movlw   high string2    ; "1 - EDM Notch Cutter"
     movwf   FSR1H
     movlw   low string2
@@ -1616,8 +1613,8 @@ skipString5:
 
 skipString6:
 
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
 
     movlw   high string7    ; "2 - Cut Notch"
     movwf   FSR1H
@@ -1806,8 +1803,8 @@ revDirDMMP2:
 
 option3DMMP2:
 
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
 
     movlw   high string24   ; "6 - Erosion "
     movwf   FSR1H
@@ -2124,8 +2121,8 @@ quickRetractCN:
     call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
     movlp   high startSerialPortTransmit
@@ -2162,8 +2159,8 @@ displayCN:
     call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
 
@@ -2411,8 +2408,8 @@ quickRetractCT:
     call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
     call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
@@ -2944,8 +2941,8 @@ setTarget:
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
  
     movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
     movwf   FSR1H
@@ -3027,8 +3024,8 @@ endSD:
 
 setCutMode:
 
-    movlw   0x94
-    call    writeControl    ; position at line 3 column 1
+    movlw   LINE3_COL1      ; set display position
+    call    writeControl
     
     movlw   high string17   ; load the high of string17 to be used with low of string17 or string18
     movwf   FSR1H
@@ -3041,7 +3038,7 @@ setCutMode:
    
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0x94
+    movlw   LINE3_COL1      ; set display position
     call    writeControl
 	call	turnOnBlink
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
@@ -3571,16 +3568,16 @@ moveCursorSHO:
     btfss   STATUS,Z    
     goto    line2SHO
 
-    movlw   0x94            ; move cursor up one line
+    movlw   LINE3_COL1          ; move cursor up one line
     movwf   cursorPos
-    call    writeControl    ; write the cursor to the LCD
+    call    writeControl        ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
     return
 
 line2SHO:
 
-    movlw   0x94
+    movlw   LINE3_COL1
     subwf   cursorPos,W     ; is cursor at 0x94?
     btfss   STATUS,Z    
     goto    line3SHO
@@ -3680,16 +3677,16 @@ line2SLO:
     btfss   STATUS,Z    
     goto    line3SLO
 
-    movlw   0x94            ; move cursor down one line
+    movlw   LINE3_COL1          ; move cursor down one line
     movwf   cursorPos
-    call    writeControl    ; write the cursor to the LCD
+    call    writeControl        ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
 
 line3SLO:
 
-    movlw   0x94
+    movlw   LINE3_COL1
     subwf   cursorPos,W     ; is cursor at 0x94?
     btfss   STATUS,Z    
     goto    line4SLO
