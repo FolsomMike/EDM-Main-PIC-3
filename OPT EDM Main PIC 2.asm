@@ -293,6 +293,15 @@ LEDPIC_SET_PWM                  EQU 0x01    ; sets the PWM values
 LEDPIC_START                    EQU 0x02    ; starts normal operation
 LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
 
+    
+;LCD Screen Position Codes                
+                
+LINE2_COL1  EQU     0xc0
+                
+  
+  
+  
+  
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -1354,7 +1363,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xc0            ; set position for writeControl to line 2, column 1
+    movlw   LINE2_COL1      ; set display position
     call    writeControl    ; position at line 2 column 1
     movlw   high string1    ; "CHOOSE CONFIGURATION"
     movwf   FSR1H
@@ -1538,7 +1547,7 @@ doMainMenu:
 
 	; call here to default to option 1
 
-    movlw   0xc0
+    movlw   LINE2_COL1      ; set display position    
     movwf   cursorPos       ; option 1 highlighted
     movlw   0x1
     movwf   menuOption      ; option 1 currently selected
@@ -1577,8 +1586,8 @@ skipDMM:
 
 ; if target depth not already set (=0), display this string
 
-    movlw   0xc0
-    call    writeControl    ; position at line 2 column 1
+    movlw   LINE2_COL1      ; set display position
+    call    writeControl
 
     call    isTargetZero    ; is target variable zero?
     btfss   STATUS,Z
@@ -1765,8 +1774,8 @@ doMainMenuPage2A:			; call here if selected option has already been set by calle
 
 ; display the second option
 
-    movlw   0xc0
-    call    writeControl    ; position at line 2 column 1
+    movlw   LINE2_COL1      ; set display position
+    call    writeControl
 
     movlw   high string20   ; "5 - Motor Dir "
     movwf   FSR1H
@@ -2111,8 +2120,8 @@ quickRetractCN:
 
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
  
-    movlw   0xc0
-    call    writeControl    ; position at line 2 column 1
+    movlw   LINE2_COL1      ; set display position
+    call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
     movlw   0x94
@@ -2149,8 +2158,8 @@ displayCN:
 
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
 
-    movlw   0xc0
-    call    writeControl    ; position at line 2 column 1
+    movlw   LINE2_COL1      ; set display position
+    call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
     movlw   0x94
@@ -2398,8 +2407,8 @@ quickRetractCT:
  
     call    setupLCDBlockPkt    ; prepare block data packet for LCD    
     
-    movlw   0xc0
-    call    writeControl    ; position at line 2 column 1
+    movlw   LINE2_COL1      ; set display position
+    call    writeControl
     movf    scratch7,W
     call    writeChar       ; write asterisk or space by "Up" label
     movlw   0x94
@@ -3576,7 +3585,7 @@ line2SHO:
     btfss   STATUS,Z    
     goto    line3SHO
 
-    movlw   0xc0            ; move cursor up one line
+    movlw   LINE2_COL1      ; set display position
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
@@ -3585,8 +3594,8 @@ line2SHO:
 
 line3SHO:
 
-    movlw   0xc0
-    subwf   cursorPos,W     ; is cursor at 0xc0?
+    movlw   LINE2_COL1
+    subwf   cursorPos,W     ; is cursor at LINE2_COL1?
     btfss   STATUS,Z    
     goto    line4SHO
 
@@ -3657,7 +3666,7 @@ moveCursorSLO:
     btfss   STATUS,Z    
     goto    line2SLO
 
-    movlw   0xc0            ; move cursor down one line
+    movlw   LINE2_COL1      ; set display position
     movwf   cursorPos
     call    writeControl    ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
@@ -3666,8 +3675,8 @@ moveCursorSLO:
 
 line2SLO:
 
-    movlw   0xc0
-    subwf   cursorPos,W     ; is cursor at 0xc0?
+    movlw   LINE2_COL1
+    subwf   cursorPos,W     ; is cursor at LINE2_COL1?
     btfss   STATUS,Z    
     goto    line3SLO
 
