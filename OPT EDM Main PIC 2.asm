@@ -300,7 +300,8 @@ LINE1_COL1  EQU     0x80
 LINE2_COL1  EQU     0xc0
 LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
-  
+
+LINE2_COL2  EQU     0xc1
 LINE4_COL12 EQU     0xdf
   
 ; end of Defines
@@ -2215,8 +2216,8 @@ exitCN:
 
 setupCutNotchAndCycleTest:
 
-    movlw   0xc1
-    call    writeControl    ; position at line 2 column 2
+    movlw   LINE2_COL2      ; set display position
+    call    writeControl
 
     movlw   high string15   ; "Up Speed>"
     movwf   FSR1H
