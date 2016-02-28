@@ -304,6 +304,7 @@ LINE4_COL1  EQU     0xd4
 LINE2_COL2  EQU     0xc1
 LINE3_COL2  EQU     0x95  
 LINE4_COL12 EQU     0xdf
+LINE4_COL18 EQU     0xe5
 
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
@@ -2243,8 +2244,8 @@ setupCutNotchAndCycleTest:
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
 
-    movlw   0xe5
-    call    writeControl    ; position at line 4 column 18
+    movlw   LINE4_COL18     ; set display position
+    call    writeControl
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
 
@@ -3219,8 +3220,8 @@ jogMode:
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xe5
-    call    writeControl    ; position at line ? column 6
+    movlw   LINE4_COL18     ; set display position
+    call    writeControl
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
 
