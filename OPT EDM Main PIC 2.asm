@@ -237,7 +237,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "ifdef debug" to find all examples of such code.
 
-#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
+;#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
 
 
 ; Values for the digital pot settings.
@@ -561,7 +561,7 @@ BLINK_ON_FLAG			EQU		0x01
 
     menuOption              ; tracks which menu option is currently selected
 
-    switchStates            ; debug mks -- replaces buttonState?
+    switchStates            ; wip mks -- replaces buttonState?
 
     buttonState                  
                             ; bit 0: 0 = Select/Reset/Zero/Enter button pressed
@@ -642,8 +642,8 @@ BLINK_ON_FLAG			EQU		0x01
     scratch9
     scratch10
 
-	cycleTestRetract0		; debug mks - use a scratch variable instead?
-	cycleTestRetract1		; debug mks - use a scratch variable instead?
+	cycleTestRetract0		; wip mks - use a scratch variable instead?
+	cycleTestRetract1		; wip mks - use a scratch variable instead?
 
 	; next variables ONLY written to by interrupt code
 
@@ -861,8 +861,6 @@ start:
     movlp   high start
 
 menuLoop:
-
-    call    setCutMode   ;debug mks
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
 
@@ -2122,7 +2120,7 @@ quickRetractCN:
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
     movlp   high startSerialPortTransmit
-    call    startSerialPortTransmit ; force buffer to print, don't wait as jogging is time critical
+    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
     movlp   high skipDirSymUpdateCN
     
 skipDirSymUpdateCN:
@@ -2166,8 +2164,8 @@ displayCN:
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
     movlp   high startSerialPortTransmit
-    call    startSerialPortTransmit ; force buffer to print, but don't wait because jogging is time
-                                    ; critical
+    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
+
     movlp   checkPositionCN
 
 checkPositionCN:        ; compare position with desired cut depth, exit when reached
@@ -2279,7 +2277,9 @@ setupCutNotchAndCycleTest:
 ;
 
 cycleTest:
-    
+
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
+
     call    clearScreen     ; clear the LCD screen
 
     movlw   high string19   ; "Cycle Test"
@@ -2334,6 +2334,7 @@ moveDownCT:
 	;count how many ticks the blade travels down before touchdown - on the up cycle this
 	;count will be used to stop the blade in approximately the original start position
 	;each time - as a cut is made, the up and down positions will move down slowly
+    
 	incf	cycleTestRetract0,F	; increment low byte ~ see note "incf vs decf rollover"
     btfsc   STATUS,Z
 	incf	cycleTestRetract1,F	; increment high byte
@@ -2387,15 +2388,16 @@ quickRetractCT:
 	btfss	flags, UPDATE_DIR_SYM
 	goto    skipDirSymUpdateCT
 
-
     banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
     movf    serialXmtBufNumBytes,W
     btfss   STATUS,Z
     goto    skipDirSymUpdateCT 		; don't display if transmit buffer not empty
 
     banksel flags
-	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while looping
+	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while quick retracting
  
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
+    
     movlw   0xc0
     call    writeControl    ; position at line 2 column 1
     movf    scratch7,W
@@ -2404,8 +2406,7 @@ quickRetractCT:
     call    writeControl    ; position at line 3 column 1
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
-    call    startSerialPortTransmit ; force buffer to print, but don't wait because jogging is time
-                                    ; critical
+    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
 
 skipDirSymUpdateCT:
 
@@ -3361,7 +3362,7 @@ displayJM:
     call    writeControl    ; position in desired location
     call    displayPos      ; display the location of the head relative to the zero point
     movlp   high startSerialPortTransmit
-    call    startSerialPortTransmit ; force buffer to print, don't wait as jogging is time critical
+    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
     movlp   high displayJM                                   
                                     
     banksel flags
