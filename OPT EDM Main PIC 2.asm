@@ -864,7 +864,7 @@ menuLoop:
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
 
-        call    doMainMenu      ; display and handle the main menu
+    call    doMainMenu      ; display and handle the main menu
 
     goto    menuLoop
     
@@ -2366,7 +2366,6 @@ upCycleCT:
 									; this can't be done immediately because the LDC print
 									; service might be busy, so set a flag to trigger the
 									; update during the retract loop when the LCD is ready
-
 ; enter a fast loop without much overhead to retract quickly until head returns to starting position
 
 quickRetractCT:
@@ -2915,6 +2914,8 @@ setTarget:
 
 ; set up the display
 
+    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
+    
     call    clearScreen     ; clear the LCD screen
 
     movlw   high string9   ; "   Set Cut Depth"
@@ -6871,8 +6872,8 @@ handleTimer0Int:
     decf    debounce1,F
 
 noDebounceDec:
-
-    retfie
+    
+    return
 
 ; end of handleTimer0Int
 ;--------------------------------------------------------------------------------------------------
