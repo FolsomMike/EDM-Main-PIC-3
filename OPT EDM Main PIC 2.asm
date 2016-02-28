@@ -298,7 +298,8 @@ LEDPIC_SET_RESET                EQU 0xff    ; resets to a known state
                 
 LINE2_COL1  EQU     0xc0
 LINE3_COL1  EQU     0x94
-
+LINE4_COL1  EQU     0xd4
+  
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -1376,8 +1377,8 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xd4
-    call    writeControl    ; position at line 4 column 1
+    movlw   LINE4_COL1      ; set display position
+    call    writeControl
     movlw   high string3    ; "2 - EDM Extend Reach"
     movwf   FSR1H
     movlw   low string3
@@ -1622,8 +1623,8 @@ skipString6:
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xd4
-    call    writeControl    ; position at line 4 column 1
+    movlw   LINE4_COL1      ; set display position
+    call    writeControl
 
     movlw   high string8    ; "3 - Jog Electrode"
     movwf   FSR1H
@@ -1915,8 +1916,8 @@ skipDMMP26:
 	goto	skipDMMP27
 
 	;go back to previous menu with last option defaulted	
-    movlw   0xd4
-    movwf   cursorPos       ; last option highlighted
+    movlw   LINE4_COL1      ; set display position
+    movwf   cursorPos
     movlw   0x3
     movwf   menuOption      ; last option currently selected
 	goto	doMainMenuA		; display previous menu page
@@ -3563,7 +3564,7 @@ selectHigherOption:
 
 moveCursorSHO:
 
-    movlw   0xd4
+    movlw   LINE4_COL1
     subwf   cursorPos,W     ; is cursor at 0xd4?
     btfss   STATUS,Z    
     goto    line2SHO
@@ -3691,9 +3692,9 @@ line3SLO:
     btfss   STATUS,Z    
     goto    line4SLO
 
-    movlw   0xd4            ; move cursor down one line
+    movlw   LINE4_COL1          ; move cursor down one line
     movwf   cursorPos
-    call    writeControl    ; write the cursor to the LCD
+    call    writeControl        ; write the cursor to the LCD
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 	return
