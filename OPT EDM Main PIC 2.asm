@@ -185,10 +185,10 @@
 ; RA6   not implemented in PIC16f1459
 ; RA7   not implemented in PIC16f1459
 ;
-; On version 1.0, RA0 is connected to Serial_Data_To_Local_PICs and RB5 is connected to the
-; Jog Down switch. Those boards are modified with jumpers so that the EUSART RX on RB5 can be used
-; to read serial data. From version 1.1 forward, the boards are redesigned and do not need
-; modification.
+; On version 1.0, RA0 is connected to Serial_Data_To_Master and RB5 is connected to the
+; Jog Down switch. Those boards are modified with jumpers to switch RA0 and RB5 so that the
+; EUSART RX on RB5 can be used to read serial data. From version 1.1 forward, the boards are
+; redesigned and do not need modification.
 ;
 ; Port B        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
@@ -516,7 +516,7 @@ BLINK_ON_FLAG			EQU		0x01
 ; commonly used to reserve RAM space or Code space when producing "absolute" code, as is done here.
 ; 
 
-; Assign variables in RAM - Bank 0 - must set BSR to 0 to access
+; Assign variables in RAM - Bank 0
 ; Bank 0 has 80 bytes of free space
 
  cblock 0x20                ; starting address
@@ -654,9 +654,14 @@ BLINK_ON_FLAG			EQU		0x01
     serialPortErrorCnt      ; number of com errors from Rabbit via serial port
     slaveI2CErrorCnt        ; number of com errors from Slave PICs via I2C bus
 
+    serialRcvPktLenMain     ; used by main to process completed packets
+    serialRcvPktCntMain     ; used by main to process completed packets    
+    
     usartScratch0
     usartScratch1
     serialIntScratch0
+    
+    ; used by serial receive interrupt    
     
     serialRcvPktLen
     serialRcvPktCnt
@@ -664,44 +669,21 @@ BLINK_ON_FLAG			EQU		0x01
     serialRcvBufPtrL
     serialRcvBufLen
     
+    ; used by serial transmit interrupt
+    
     serialXmtBufNumBytes
     serialXmtBufPtrH
     serialXmtBufPtrL
     serialXmtBufLen
 
  endc
-
-;-----------------
-
-; Assign variables in RAM - Bank 1 - must set BSR to 1 to access
-; Bank 1 has 80 bytes of free space
-
- cblock 0xa0                ; starting address
-
-    serialRcvBuf:SERIAL_RCV_BUF_LEN
-
-    serialXmtBuf:SERIAL_XMT_BUF_LEN
- 
-    endc
-
-; Compute address of serialRcvBuf in linear data memory for use as a large buffer
-RCV_BUF_OFFSET EQU (serialRcvBuf & 0x7f) - 0x20
-SERIAL_RCV_BUF_LINEAR_ADDRESS   EQU ((serialRcvBuf/.128)*.80)+0x2000+RCV_BUF_OFFSET
-SERIAL_RCV_BUF_LINEAR_LOC_H     EQU high SERIAL_RCV_BUF_LINEAR_ADDRESS
-SERIAL_RCV_BUF_LINEAR_LOC_L     EQU low SERIAL_RCV_BUF_LINEAR_ADDRESS
-    
-; Compute address of serialXmtBuf in linear data memory for use as a large buffer
-XMT_BUF_OFFSET EQU (serialXmtBuf & 0x7f) - 0x20
-SERIAL_XMT_BUF_LINEAR_ADDRESS   EQU ((serialXmtBuf/.128)*.80)+0x2000+XMT_BUF_OFFSET
-SERIAL_XMT_BUF_LINEAR_LOC_H     EQU high SERIAL_XMT_BUF_LINEAR_ADDRESS
-SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
                
 ;-----------------
 
-; Assign variables in RAM - Bank 3 - must set BSR to 3 to access
-; Bank 2 has 80 bytes of free space
+; Assign variables in RAM - Bank 1
+; Bank 1 has 80 bytes of free space
 
- cblock 0x120                ; starting address
+ cblock 0xa0                ; starting address
 
     ; Current depth of electrode. This is the distance travelled since last zeroing.
     ; unpacked BCD decimal value, each can be 0-9
@@ -761,6 +743,35 @@ SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
     scratchc2
 
  endc
+
+ ;-----------------
+
+; Assign variables in RAM - Bank 2
+; Bank 2 has 80 bytes of free space
+ 
+; WARNING: These buffers may be large enough to overrun the following banks. Linear indirect
+; addressing is used to access them. They may be moved to a higher bank if necessary to make room
+; for variables in this bank.
+
+ cblock 0x120                ; starting address
+
+    serialRcvBuf:SERIAL_RCV_BUF_LEN
+
+    serialXmtBuf:SERIAL_XMT_BUF_LEN
+ 
+    endc
+
+; Compute address of serialRcvBuf in linear data memory for use as a large buffer
+RCV_BUF_OFFSET EQU (serialRcvBuf & 0x7f) - 0x20
+SERIAL_RCV_BUF_LINEAR_ADDRESS   EQU ((serialRcvBuf/.128)*.80)+0x2000+RCV_BUF_OFFSET
+SERIAL_RCV_BUF_LINEAR_LOC_H     EQU high SERIAL_RCV_BUF_LINEAR_ADDRESS
+SERIAL_RCV_BUF_LINEAR_LOC_L     EQU low SERIAL_RCV_BUF_LINEAR_ADDRESS
+    
+; Compute address of serialXmtBuf in linear data memory for use as a large buffer
+XMT_BUF_OFFSET EQU (serialXmtBuf & 0x7f) - 0x20
+SERIAL_XMT_BUF_LINEAR_ADDRESS   EQU ((serialXmtBuf/.128)*.80)+0x2000+XMT_BUF_OFFSET
+SERIAL_XMT_BUF_LINEAR_LOC_H     EQU high SERIAL_XMT_BUF_LINEAR_ADDRESS
+SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
 
 ;-----------------
  
@@ -6255,12 +6266,20 @@ handleReceivedDataIfPresent:
 
 handleSerialPacket:
 
+    banksel serialRcvPktLen
+
+    movf    serialRcvPktLen,W           ; store the packet length variable so the receive interrupt
+    movwf   serialRcvPktLenMain         ; can overwrite it if a new packet arrives
+        
+    call    resetSerialPortRcvBuf       ; allow the serial receive interrupt to start a new packet
+                                        ; see "Serial Data Timing" notes at the top of this page
+    
     ;verify the checksum
 
-    banksel flags2
-
-    movf    serialRcvPktLen, W          ; copy number of bytes to variable for counting
-    movwf   serialRcvPktCnt
+    banksel serialRcvPktLenMain
+  
+    movf    serialRcvPktLenMain, W      ; copy number of bytes to variable for counting
+    movwf   serialRcvPktCntMain
 
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H ; point FSR0 at start of receive buffer
     movwf   FSR0H
@@ -6273,7 +6292,7 @@ hspSumLoop:
 
     addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
     incf    FSR0L, F
-    decfsz  serialRcvPktCnt, F
+    decfsz  serialRcvPktCntMain, F
     goto    hspSumLoop
 
     movf    WREG, F                         ; test for zero
@@ -6285,7 +6304,7 @@ hspError:
     incf    serialPortErrorCnt, F           ; track errors
     bsf     statusFlags,SERIAL_COM_ERROR
 
-    goto    resetSerialPortRcvBuf
+    return
 
 ; end of handleSerialPacket
 ;--------------------------------------------------------------------------------------------------
@@ -6299,29 +6318,29 @@ hspError:
 ;
 ; On Exit:
 ;
-; FSR0 points to serialRcvBuf
+; FSR1 points to serialRcvBuf
 ;
 
 parseCommandFromSerialPacket:
 
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H     ; point FSR0 at start of receive buffer
-    movwf   FSR0H
+    movwf   FSR1H
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
-    movwf   FSR0L
+    movwf   FSR1L
 
 ; parse the command byte by comparing with each command
 
-    movf    INDF0,W
+    movf    INDF1,W
     sublw   SWITCH_STATES_CMD
     btfsc   STATUS,Z
     goto    handleSwitchStatesPacket
 
-;    movf    INDF0,W
+;    movf    INDF1,W
 ;    sublw   ???        -- use this example for a future command
 ;    btfsc   STATUS,Z
 ;    goto    handleLCDInstructionPacket
 
-    goto    resetSerialPortRcvBuf
+    return
 
 ; end of parseCommandFromSerialPacket
 ;--------------------------------------------------------------------------------------------------
@@ -6402,6 +6421,7 @@ setupSerialXmtPkt:
 ;
 ; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
 ; serialXmtBufNumBytes will be zeroed
+;
 
 setUpSerialXmtBuf:
 
@@ -6642,9 +6662,13 @@ resetSerialPortRcvBuf:
 
     bcf     RCSTA, CREN     ; clear error by disabling/enabling receiver
     bsf     RCSTA, CREN
-
+        
 RSPRBnoOERRError:
 
+    banksel RCREG           ; clear any pending interrupt by clearing both bytes of the buffer
+    movf    RCREG, W
+    movf    RCREG, W
+        
     return
 
 ; end of resetSerialPortRcvBuf
@@ -6788,14 +6812,19 @@ handleInterrupt:
 
                                     ; INTCON is a core register, no need to banksel
 	btfsc 	INTCON, T0IF     		; Timer0 overflow interrupt?
-	goto 	handleTimer0Int
+	call 	handleTimer0Int         ; call so the serial port interrupts will get checked
+                                    ;  if not, the timer interrupt can block them totally
 
     banksel PIR1
-
-    btfsc   PIR1, RCIF              ; serial port receive interrupt?
+    btfsc   PIR1, RCIF              ; serial port receive interrupt
     goto    handleSerialPortReceiveInt
 
-    btfsc   PIR1, TXIF              ; serial port transmit interrupt?
+    banksel PIE1                    ; only handle UART xmt interrupt if enabled
+    btfss   PIE1, TXIE              ;  the TXIF flag is always set whenever the buffer is empty
+    retfie                          ;  and should be ignored unless the interrupt is enabled
+    
+    banksel PIR1
+    btfsc   PIR1, TXIF              ; serial port transmit interrupt
     goto    handleSerialPortTransmitInt
 
 
