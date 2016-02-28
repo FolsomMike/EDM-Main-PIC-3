@@ -302,10 +302,11 @@ LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
 
 LINE2_COL2  EQU     0xc1
+LINE2_COL5  EQU     0xc4
 LINE3_COL2  EQU     0x95  
 LINE4_COL12 EQU     0xdf
 LINE4_COL18 EQU     0xe5
-
+ 
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -2940,8 +2941,8 @@ setTarget:
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xc4
-    call    writeControl    ; position at line 2 column 4
+    movlw   LINE2_COL5      ; set display position
+    call    writeControl
     movlw   high string10   ; "0.000 inches"
     movwf   FSR1H
     movlw   low string10
@@ -2962,12 +2963,12 @@ setTarget:
    
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xc4
-    call    writeControl    ; position back at line 2 column 4
+    movlw   LINE2_COL5      ; set display position
+    call    writeControl
 
     call    displayTarget   ; display the value over the "0.000 inches" string so it can be edited
 
-    movlw   0xc4
+    movlw   LINE2_COL5      ; set display position
     call    writeControl
 	call	turnOnBlink
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
@@ -2982,8 +2983,8 @@ setTarget:
     movlw   low target9          
     movwf   FSR1L
     
-    movlw   0xc4
-    movwf   cursorPos       ; cursor position
+    movlw   LINE2_COL5      ; set display position
+    movwf   cursorPos
 
 loopSD:
 
@@ -3212,8 +3213,8 @@ jogMode:
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-    movlw   0xc4
-    call    writeControl    ; position at line 2 column 4
+    movlw   LINE2_COL5      ; set display position
+    call    writeControl
     movlw   high string12   ; "Zero or Exit"
     movwf   FSR1H
     movlw   low string12
