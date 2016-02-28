@@ -301,6 +301,8 @@ LINE2_COL1  EQU     0xc0
 LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
   
+LINE4_COL12 EQU     0xdf
+  
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -2168,8 +2170,8 @@ displayCN:
 
     call    displaySpeedAndPower    ; display the current advance speed and power level
 
-    movlw   0xdf
-    call    writeControl    ; position in desired location
+    movlw   LINE4_COL12     ; set display position
+    call    writeControl
     call    displayPos      ; display the location of the head relative to the zero point
     movlp   high startSerialPortTransmit
     call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
@@ -2244,8 +2246,8 @@ setupCutNotchAndCycleTest:
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
 
-    movlw   0xdf
-    call    writeControl    ; position at line 4 column 12
+    movlw   LINE4_COL12     ; set display position
+    call    writeControl
     call    displayPos      ; display the location of the head relative to the zero point
 
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
@@ -3220,8 +3222,8 @@ jogMode:
     movlw   0x22
     call    writeChar       ; write '"' for inch mark
 
-    movlw   0xdf
-    call    writeControl    ; position in desired location
+    movlw   LINE4_COL12     ; set display position
+    call    writeControl
     call    displayPos      ; display the location of the head relative to the zero point
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
@@ -3327,8 +3329,8 @@ not_dwnJM:
 
     call    waitXmtPrep     ; wait until buffer printed
 
-    movlw   0xdf
-    call    writeControl    ; position in desired location
+    movlw   LINE4_COL12     ; set display position
+    call    writeControl
     call    displayPos      ; display the position
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
@@ -3366,8 +3368,8 @@ displayJM:
 
     call    setupLCDBlockPkt    ; prepare block data packet for LCD    
     
-    movlw   0xdf
-    call    writeControl    ; position in desired location
+    movlw   LINE4_COL12     ; set display position
+    call    writeControl
     call    displayPos      ; display the location of the head relative to the zero point
     movlp   high startSerialPortTransmit
     call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
