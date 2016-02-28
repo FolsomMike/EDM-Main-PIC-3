@@ -1362,7 +1362,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
     call    printStringWaitPrep     ; print the string and wait until done
 
     movlw   LINE2_COL1      ; set display position
-    call    writeControl    ; position at line 2 column 1
+    call    writeControl
     movlw   high string1    ; "CHOOSE CONFIGURATION"
     movwf   FSR1H
     movlw   low string1
@@ -1388,7 +1388,7 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 ; position the cursor on the default selection
     
     movf    cursorPos,W		; load the cursor position to highlight the current choice
-    call    writeControl    ; write line 3 column 1
+    call    writeControl
     call    turnOnBlink
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
@@ -1635,7 +1635,7 @@ skipString6:
 ;position the cursor on the default selection
 
     movf    cursorPos,W		; load the cursor position to highlight the current choice
-    call    writeControl    ; position at line 2 column 1
+    call    writeControl
 	call	turnOnBlink
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
@@ -1837,7 +1837,7 @@ placeCursorDMMP2:
 ;position the cursor on the default selection
 
     movf    cursorPos,W		; load the cursor position to highlight the current choice
-    call    writeControl    ; position at line 1 column 1
+    call    writeControl
 	call	turnOnBlink
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
@@ -3565,7 +3565,7 @@ selectHigherOption:
 moveCursorSHO:
 
     movlw   LINE4_COL1
-    subwf   cursorPos,W     ; is cursor at 0xd4?
+    subwf   cursorPos,W         ; is cursor at 0xd4?
     btfss   STATUS,Z    
     goto    line2SHO
 
