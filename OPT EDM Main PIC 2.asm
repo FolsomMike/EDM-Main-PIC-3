@@ -301,12 +301,13 @@ LINE2_COL1  EQU     0xc0
 LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
 
+LINE1_COL7  EQU     0x86  
 LINE2_COL2  EQU     0xc1
 LINE2_COL5  EQU     0xc4
 LINE3_COL2  EQU     0x95  
 LINE4_COL12 EQU     0xdf
 LINE4_COL18 EQU     0xe5
- 
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -3205,8 +3206,8 @@ jogMode:
     
     call    clearScreen     ; clear the LCD screen
 
-    movlw   0x86
-    call    writeControl    ; position at line 1 column 6
+    movlw   LINE1_COL7      ; set display position
+    call    writeControl
     movlw   high string11   ; "Jog Mode"
     movwf   FSR1H
     movlw   low string11
