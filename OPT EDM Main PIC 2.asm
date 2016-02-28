@@ -302,8 +302,9 @@ LINE3_COL1  EQU     0x94
 LINE4_COL1  EQU     0xd4
 
 LINE2_COL2  EQU     0xc1
+LINE3_COL2  EQU     0x95  
 LINE4_COL12 EQU     0xdf
-  
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -2228,8 +2229,8 @@ setupCutNotchAndCycleTest:
     call    displaySpeedAndPower    ; display the current advance speed and power level
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
-    movlw   0x95
-    call    writeControl    ; position at line 3 column 2
+    movlw   LINE3_COL2          ; set display position
+    call    writeControl
 
     movlw   high string16   ; "Down  Stop>"
     movwf   FSR1H
