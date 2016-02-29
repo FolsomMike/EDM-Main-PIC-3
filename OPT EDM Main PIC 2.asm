@@ -1227,7 +1227,7 @@ setupLCDBlockPkt:
     
     movlp   high setupSerialXmtPkt
     call    setupSerialXmtPkt
-    movlp   setupLCDBlockPkt
+    movlp   high setupLCDBlockPkt
 
     banksel flags
 
@@ -1283,10 +1283,10 @@ printStringWaitPrep:
 
 flushXmtWaitPrep:
     
-    movlp   startSerialPortTransmit
+    movlp   high startSerialPortTransmit
     call    startSerialPortTransmit
 
-    movlp   waitSerialXmtComplete
+    movlp   high waitSerialXmtComplete
     call    waitSerialXmtComplete
 
     call    setupLCDBlockPkt
@@ -1362,14 +1362,15 @@ doExtModeMenuA:				; call here if default option has already been set by caller
 
 ;print the strings of the menu
 
+    movlp   high setupLCDBlockPkt    
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
-
+    
     movlw   high string0   ; "OPT AutoNotcher x.x"
     movwf   FSR1H
     movlw   low string0
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
-
+    
     movlw   LINE2_COL1      ; set display position
     call    writeControl
     movlw   high string1    ; "CHOOSE CONFIGURATION"
@@ -2182,7 +2183,7 @@ displayCN:
     movlp   high startSerialPortTransmit
     call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
 
-    movlp   checkPositionCN
+    movlp   high checkPositionCN
 
 checkPositionCN:        ; compare position with desired cut depth, exit when reached
 
@@ -4533,9 +4534,9 @@ loopPS:
     btfss   STATUS,Z
     goto    pS1
 
-    movlp   startSerialPortTransmit
+    movlp   high startSerialPortTransmit
     call    startSerialPortTransmit     ; force buffer to print
-    movlp   printString
+    movlp   high printString
     banksel flags
     return
 
@@ -6009,7 +6010,7 @@ readByteFromEEprom1ViaI2C:
 ;
 
 resetLCD:
-    
+
     movlp   high setupLCDBlockPkt
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
 
@@ -6456,7 +6457,7 @@ handleSerialPacket:
 hspSumLoop:
 
     addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
-    incf    FSR0L, F
+    addfsr  FSR0,1
     decfsz  serialRcvPktCntMain, F
     goto    hspSumLoop
 
@@ -6581,17 +6582,27 @@ setupSerialPort:
     clrf    serialPortErrorCnt
     bcf     statusFlags,SERIAL_COM_ERROR
 
-    ;set the baud rate to 57,600 (will actually be 57.97K with 0.64% error)
+    ;to set the baud rate to 57,600 (will actually be 57.97K with 0.64% error)
     ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 68
 
+    ;to set the baud rate to 19,200 (will actually be 19.23K with 0.16% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 207
+
+    ;to set the baud rate to 9,600 (will actually be 9592 with 0.08% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 416 (0x1a0)
+    
+    ;to set the baud rate to 2,400 (will actually be 2399.5 with 0.02% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 1666 (0x682)
+    
     banksel TXSTA
     bsf     TXSTA, BRGH
     banksel BAUDCON
     bsf     BAUDCON, BRG16
     banksel SPBRGH
-    clrf    SPBRGH
+    movlw   0x01
+    movwf   SPBRGH
     banksel SPBRGL
-    movlw   .68
+    movlw   0xa0
     movwf   SPBRGL
 
     ;set UART mode and enable receiver and transmitter
