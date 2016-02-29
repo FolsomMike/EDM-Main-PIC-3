@@ -381,8 +381,6 @@ LINE4_COL18 EQU     0xe5
 
 ; Port A
 
-JOG_DWN_SW_P    EQU     PORTA
-JOG_DWN_SW      EQU     RA0         ; input ~ RA0 can only be input on PIC16f1459 ~ Jog Down Switch
 UNUSED_RA1_P    EQU     PORTA
 UNUSED_RA1      EQU     RA1         ; input ~ RA1 can only be input on PIC16f1459
 ;NA_RA2         EQU     RA2         ; RA2 not implemented on PIC16f1459
@@ -404,10 +402,6 @@ I2CSCL_LINE     EQU     RB6
 
 MOTOR_ENABLE_L  EQU     LATC
 MOTOR_ENABLE    EQU     RC0         ; output
-MODE_SW_P       EQU     PORTC
-MODE_SW         EQU     RC1         ; input
-JOG_UP_SW_P     EQU     PORTC
-JOG_UP_SW       EQU     RC2         ; input
 MOTOR_DIR_L     EQU     LATC
 MOTOR_DIR       EQU     RC3         ; output
 MOTOR_STEP_L    EQU     LATC
@@ -416,15 +410,32 @@ LO_LIMIT_P      EQU     PORTC
 LO_LIMIT		EQU     RC5         ; input ~ cutting current low limit
 MOTOR_MODE_L    EQU     LATC
 MOTOR_MODE      EQU     RC6         ; output ~ motor step size selection
-SELECT_SW_P     EQU     PORTC
-SELECT_SW       EQU     RC7         ; input ~ select switch
 
-; Button State Flags
+; Switches
 
-SELECT_SW_STATE     EQU     0
-JOG_UP_SW_STATE     EQU     1
-JOG_DWN_SW_STATE    EQU     2
-MODE_SW_STATE       EQU     3
+MODE_JOGUP_SEL_EPWR_P   EQU     PORTC
+JOGDWN_P                EQU     PORTA
+
+MODE_SW                 EQU     RC1
+JOG_UP_SW               EQU     RC2
+SELECT_SW               EQU		RC7
+ELECTRODE_PWR_SW        EQU     RC4
+JOG_DOWN_SW             EQU     RA0
+
+;bits in switchStates variable
+
+MODE_SW_FLAG            EQU     0
+JOG_UP_SW_FLAG          EQU     1
+SELECT_SW_FLAG          EQU     2
+ELECTRODE_PWR_SW_FLAG   EQU     3
+JOG_DOWN_SW_FLAG        EQU     4
+
+;bits in outputStates variable
+
+AC_OK_LED_FLAG          EQU     0
+BUZZER_FLAG             EQU     1
+SHORT_LED_FLAG          EQU     2
+       
 
 ; I2C bus ID byte for writing to digital pot 1
 ; upper nibble = 1010 (bits 7-4)
@@ -577,15 +588,9 @@ BLINK_ON_FLAG			EQU		0x01
 
     menuOption              ; tracks which menu option is currently selected
 
-    switchStates            ; wip mks -- replaces buttonState?
+    switchStates
 
-    buttonState                  
-                            ; bit 0: 0 = Select/Reset/Zero/Enter button pressed
-                            ; bit 1: 0 = Jog Up button pressed
-                            ; bit 2: 0 = Jog Down button pressed
-                            ; bit 3: 0 = Mode button switched to Setup mode
-
-    buttonPrev              ; state of buttons the last time they were scanned
+    switchStatesPrev        ; state of switches the last time they were scanned
                             ; bit assignments same as for buttonState
 
     eepromAddressL		    ; use to specify address to read or write from EEprom
@@ -888,6 +893,44 @@ menuLoop:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; trapSwitchInputs
+;
+; Checks each switch input and sets the associated flag for each if it is active.
+;
+; All other code uses the flags to determine the state of the switches. This allows the switch
+; states to be easily read from an alternative source, such as the User Interface board which
+; transmits switch states via serial line.
+;
+; This function also allows streamlining of debounce code.
+;
+
+trapSwitchInputs:
+
+    banksel MODE_JOGUP_SEL_EPWR_P
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,MODE_SW
+    bcf     switchStates,MODE_SW_FLAG
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
+    bcf     switchStates,JOG_UP_SW_FLAG
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
+    bcf     switchStates,SELECT_SW_FLAG
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,ELECTRODE_PWR_SW
+    bcf     switchStates,ELECTRODE_PWR_SW_FLAG
+
+    banksel JOGDWN_P
+
+    btfss   JOGDWN_P,JOG_DOWN_SW
+    bcf     switchStates,JOG_DOWN_SW_FLAG
+
+    return
+
+; end of trapSwitchInputs
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
 ; setHighCurrentLimitDigitalPot
 ;
 ; Sets the digital pot value for the high current limit comparator to the value in hiCurrentLimit.
@@ -1109,13 +1152,6 @@ flipSign:
 ;
 ; buttonState & buttonPrev bit assignments:
 ;
-; bit 3: 0 = Reset/Zero/Enter button pressed
-; bit 4: 0 = Jog Up button pressed
-; bit 5: 0 = Jog Down button pressed
-; bit 6: 0 = Mode button active
-;
-; Uses W, buttonState, scratch0, scratch1, scratch2, scratch3
-;
 
 scanButtons:
 
@@ -1143,26 +1179,14 @@ scanButtonsQ:
 
 skipSB1:
 
-    movf    buttonState,W  ; store the previous state of the buttons
-    movwf   buttonPrev
+    movf    switchStates,W          ; store the previous state of the buttons
+    movwf   switchStatesPrev
 
-    clrw
-    movwf   buttonState    ; start with all states 0
+    movlw   0xff                    ; preset states -- flags will be set low for active switches
+    movwf   switchStates
 
-;test each port input and set button_state to match
-
-    btfsc   SELECT_SW_P,SELECT_SW
-    bsf     buttonState,SELECT_SW_STATE
-
-    btfsc   JOG_UP_SW_P,JOG_UP_SW
-    bsf     buttonState,JOG_UP_SW_STATE
-
-    btfsc   JOG_DWN_SW_P,JOG_DWN_SW
-    bsf     buttonState,JOG_DWN_SW_STATE
-
-    btfsc   MODE_SW_P,MODE_SW
-    bsf     buttonState,MODE_SW_STATE
-
+    call    trapSwitchInputs        ; check all switches and store their states
+    
     return
 
 ; end of scanButtons
@@ -2020,9 +2044,8 @@ cutLoop:
     btfsc   flags,AT_DEPTH  ; displayPosLUCL sets flags:AT_DEPTH if depth reached and time to exit
     goto    exitCN
 
-    btfss   SELECT_SW_P,SELECT_SW
+    btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
-
 
     ; if the delay timer has not reached zero, don't respond to button press
 
@@ -2033,10 +2056,10 @@ cutLoop:
 
 checkUPDWNButtons:
 
-    btfss   JOG_UP_SW_P,JOG_UP_SW
+    btfss   switchStates,JOG_UP_SW_FLAG
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
 
-    btfss   JOG_DWN_SW_P,JOG_DWN_SW
+    btfss   switchStates,JOG_DOWN_SW_FLAG
     call    adjustSpeedOrPowerDown ; decrement the speed (sparkLevel) value or Power Level
 
 checkHiLimit:
@@ -2103,7 +2126,7 @@ moveUpLUCL:
 
 quickRetractCN:
 
-    btfss   SELECT_SW_P,SELECT_SW
+    btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
@@ -2335,7 +2358,7 @@ cycleLoopCT:
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
 
-    btfss   SELECT_SW_P,SELECT_SW
+    btfss   switchStates,SELECT_SW_FLAG
     goto    exitCT          ; exit the notch cutting mode if the reset button pressed
 
 checkHiLimitCT:
@@ -2390,8 +2413,8 @@ upCycleCT:
 
 quickRetractCT:
 
-    btfss   SELECT_SW_P,SELECT_SW
-    goto    exitCT          ; exit the notch cutting mode if the reset button pressed
+    btfss   switchStates,SELECT_SW_FLAG
+    goto    exitCT          ; exit the notch cutting mode if the Select button pressed
 
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
 
@@ -2583,9 +2606,9 @@ noRetractOCT:
 
 adjustSpeedOrPowerUp:
 
-    btfss   MODE_SW_P,MODE_SW   ; in Setup mode?
-    goto    adjustSpeedUp       ; adjust Speed setting if in "Setup" mode
-    goto    adjustPowerUp       ; adjust Power Level if in "Normal" mode
+    btfss   switchStates,MODE_SW_FLAG  ; in Setup mode?
+    goto    adjustSpeedUp              ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerUp              ; adjust Power Level if in "Normal" mode
 
 ; end of adjustSpeedOrPowerUp
 ;--------------------------------------------------------------------------------------------------
@@ -2599,9 +2622,9 @@ adjustSpeedOrPowerUp:
 
 adjustSpeedOrPowerDown:
 
-    btfss   MODE_SW_P,MODE_SW   ; in Setup mode?
-    goto    adjustSpeedDown     ; adjust Speed setting if in "Setup" mode
-    goto    adjustPowerDown     ; adjust Power Level if in "Normal" mode
+    btfss   switchStates,MODE_SW_FLAG   ; in Setup mode?
+    goto    adjustSpeedDown             ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerDown             ; adjust Power Level if in "Normal" mode
 
 ; end of adjustSpeedOrPowerDown
 ;--------------------------------------------------------------------------------------------------
@@ -3058,7 +3081,7 @@ loopSCM:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP_SW_STATE
+    btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upSCM      ; skip if Up switch not pressed
 
 ; jog up button press    
@@ -3070,7 +3093,7 @@ loopSCM:
 
 skip_upSCM:
 
-    btfsc   buttonState,JOG_DWN_SW_STATE
+    btfsc   switchStates,JOG_DOWN_SW_FLAG
     goto    skip_dwnSCM     ; skip if Down switch not pressed
 
 ; jog down button press
@@ -3082,7 +3105,7 @@ skip_upSCM:
 
 skip_dwnSCM:
 
-    btfsc   buttonState,SELECT_SW_STATE
+    btfsc   switchStates,SELECT_SW_FLAG
     goto    loopSCM             ; loop without updating display if no button pressed
 
 ; set sparkLevel to value for Notch or Wall mode depending on current mode
@@ -3120,7 +3143,7 @@ loopABD:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP_SW_STATE
+    btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upABD      ; skip if Up switch not pressed
 
 ; jog up button press    
@@ -3139,7 +3162,7 @@ loopABD:
 
 skip_upABD:
 
-    btfsc   buttonState,JOG_DWN_SW_STATE
+    btfsc   switchStates,JOG_DOWN_SW_FLAG
     goto    skip_dwnABD    ; skip if Down switch not pressed
 
 ; jog down button press
@@ -3158,7 +3181,7 @@ skip_upABD:
 
 skip_dwnABD:
 
-    btfsc   buttonState,SELECT_SW_STATE
+    btfsc   switchStates,SELECT_SW_FLAG
     goto    loopABD        ; loop if Reset/Select switch not pressed
 
 ; reset/enter/zero button press - digit finished, so exit
@@ -3249,7 +3272,7 @@ loopJM:
     call    scanButtonsQ    ; monitor user input - Q entry point for short delay so motor runs
                             ; faster
 
-    btfsc   buttonState,JOG_UP_SW_STATE
+    btfsc   switchStates,JOG_UP_SW_FLAG
     goto    chk_dwnJM       ; skip if Up switch not pressed
 
 ; jog up button press    
@@ -3283,7 +3306,7 @@ jM1:
 
 chk_dwnJM:
 
-    btfsc   buttonState,JOG_DWN_SW_STATE
+    btfsc   switchStates,JOG_DOWN_SW_FLAG
     goto    not_dwnJM      ; skip if Down switch not pressed
 
 ; jog down button press
@@ -3317,13 +3340,13 @@ jM2:
 
 not_dwnJM:
 
-    btfsc   buttonState,SELECT_SW_STATE
+    btfsc   switchStates,SELECT_SW_FLAG
     goto    loopJM          ; loop if Reset/Select switch not pressed
 
 ; reset/enter/zero button press
 
-    btfsc   MODE_SW_P,MODE_SW   ; in Setup mode?
-    goto    exitJM              ;exit Jog Mode if not when Select button pressed
+    btfsc   switchStates,MODE_SW_FLAG   ; in Setup mode?
+    goto    exitJM                      ;exit Jog Mode if not when Select button pressed
 
 ; removed because this was a pain - better to be able to zero after a cut - can start a new
 ; cut this way without powering down
@@ -3350,7 +3373,7 @@ updateJM:
     movf    setupDelay,W
     call    bigDelayA
 
-    btfsc   MODE_SW_P,MODE_SW   ; in Setup mode?
+    btfsc   switchStates,MODE_SW_FLAG   ; in Setup mode?
     goto    noExtraDelayJM      ; extra pause if not in setup speed mode to slow down the head
 
     movlw   0x0             ; delay extra in normal speed mode
@@ -3506,7 +3529,7 @@ loopHMMI:
 
     call    scanButtons     ; watch for user input
 
-    btfsc   buttonState,JOG_UP_SW_STATE
+    btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upHMMI     ; skip if Up switch not pressed
 
     call    selectHigherOption  ; adjusts menu_option to reflect new selection
@@ -3515,7 +3538,7 @@ loopHMMI:
 
 skip_upHMMI:
 
-    btfsc   buttonState,JOG_DWN_SW_STATE
+    btfsc   switchStates,JOG_DOWN_SW_FLAG
     goto    skip_dwnHMMI    ; skip if Down switch not pressed
 
     movf    scratch4,W          ; maximum number of options
@@ -3525,7 +3548,7 @@ skip_upHMMI:
 
 skip_dwnHMMI:
 
-    btfsc   buttonState,SELECT_SW_STATE
+    btfsc   switchStates,SELECT_SW_FLAG
     goto    loopHMMI        ; loop if Reset/Select switch not pressed
 
     return                  ; return when Reset/Enter/Zero button pressed
@@ -5301,8 +5324,10 @@ setup:
     call    zeroDepth               ; clear the depth position variable
     movlp   high setup              ; set PCLATH back to what it was
 
-    clrf    buttonState             ; zero various variables
-
+    movlw   0xff
+    movwf   switchStates
+    movwf   switchStatesPrev
+    
     call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
 
     ; reset some values to a default state
@@ -5413,7 +5438,7 @@ setupPortA:
 
     ; set direction for each pin used
 
-    bsf     TRISA, JOG_DWN_SW           ; input    
+    bsf     TRISA, JOG_DOWN_SW          ; input    
     bsf     TRISA, SHORT_DETECT         ; input
     bsf     TRISA, HI_LIMIT             ; input
     bcf     TRISA, POWER_ON             ; output
