@@ -77,9 +77,10 @@
 ; When decrementing multi-byte values, decf CANNOT be used because it sets the Z flag but NOT the
 ; C flag.  The next byte up is not decremented when the lower byte reaches zero, but when it rolls
 ; under zero.  This can be caught by loading w with 1 and then using subwf and catching the C flag
-; cleared. (C flag is set for a roll-over with addwf, cleared for roll-under for subwf.
+; cleared. (C flag is set for a roll-over with addwf, cleared for roll-under for subwf.)
 ; For a quickie but not perfect count down of a two byte variable, decf and the Z flag can be used
-; but the upper byte will be decremented one count too early.
+; but the upper byte will be decremented one count too early. WARNING: checking both bytes for
+; zero to end the countdown will result in stopping 255 counts too early.
 ;
 ;--------------------------------------------------------------------------------------------------
 ; Operational Notes
@@ -232,13 +233,12 @@
 ; Defines
 ;
 
-; COMMENT OUT "#define debug" line before using code in system.
-; Defining debug will insert code which simplifies simulation by skipping code which waits on
+; COMMENT OUT "#define DEBUG_MODE" line before using code in system.
+; Defining DEBUG_MODE will insert code which simplifies simulation by skipping code which waits on
 ; stimulus and performing various other actions which make the simulation run properly.
-; Search for "ifdef debug" to find all examples of such code.
+; Search for "DEBUG_MODE" to find all examples of such code.
 
-;#define debug 1     ; set debug testing "on" ;//debug mks -- comment this out later
-
+#define DEBUG_MODE 1     ; set DEBUG_MODE testing "on" ;//debug mks -- comment this out later
 
 ; Values for the digital pot settings.
 ;
@@ -495,8 +495,9 @@ SERIAL_PACKET_READY EQU 3
 
 ; bits in flags3 variable
 
-EROSION_MODE    EQU     0x0
-
+EROSION_MODE    EQU     1
+DEBOUNCE_ACTIVE EQU     1
+    
 ; bits in statusFlags variable
 
 SERIAL_COM_ERROR    EQU 0
@@ -563,13 +564,13 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit 1: 1 = second serial port header byte received
                             ; bit 2: 1 = serial port packet length byte received and validated
                             ; bit 3: 1 = data packet ready for processing
-                            ; bit 4: 0 =
-                            ; bit 5: 0 =
-							; bit 6: 0 =
-							; bit 7: 0 =
+                            ; bit 4:
+                            ; bit 5:
+							; bit 6:
+							; bit 7:
 
     flags3                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
-                            ; bit 1:
+                            ; bit 1: 0 = debounce timer, inactive 1 = timer active
                             ; bit 2:
                             ; bit 3:
                             ; bit 4:
@@ -585,7 +586,7 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit 5: 0 =
 							; bit 6: 0 =
 							; bit 7: 0 =
-
+                            
     menuOption              ; tracks which menu option is currently selected
 
     switchStates
@@ -1119,8 +1120,6 @@ savePWMValuesToEEprom:
 ; var scratch1:scratch0 = word to be flipped
 ;
 ; Returns flipped word in scratch1:scratch0
-;
-; Uses W, scratch0, scratch1
 ;
 
 flipSign:
@@ -2056,12 +2055,10 @@ cutLoop:
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
-    ; if the delay timer has not reached zero, don't respond to button press
+    ; check buttons if debounce timer not active
 
-    movf    debounce0,W
-    iorwf   debounce1,W
-    btfss   STATUS,Z
-    goto    checkHiLimit    ; debounce timer not zeroed, don't check buttons
+    btfsc   flags3,DEBOUNCE_ACTIVE
+    goto    checkHiLimit                    ; debouncing, don't check buttons
 
 checkUPDWNButtons:
 
@@ -2731,10 +2728,12 @@ processValueAS:
     bsf     flags,DATA_MODIFIED     ; set flag so values will be saved
     bsf     flags,UPDATE_DISPLAY    ; set flag so display will be updated
 
-    movlw   0x45            ; start the switch debounce timer at 0x1245
+    movlw   0x45                            ; start the switch debounce timer at 0x1145
     movwf   debounce0
-    movlw   0x12
+    movlw   0x11
     movwf   debounce1
+    
+    bsf     flags3,DEBOUNCE_ACTIVE
 
     return
 
@@ -2821,10 +2820,12 @@ apuExit:
     bsf     flags,DATA_MODIFIED             ; set flag so values will be saved
     bsf     flags,UPDATE_DISPLAY            ; set flag so display will be updated
 
-    movlw   0x45                            ; start the switch debounce timer at 0x1245
+    movlw   0x45                            ; start the switch debounce timer at 0x1145
     movwf   debounce0
-    movlw   0x12
+    movlw   0x11
     movwf   debounce1
+    
+    bsf     flags3,DEBOUNCE_ACTIVE
 
     return
 
@@ -3935,7 +3936,7 @@ bigDelay:
 bigDelayA:
     movwf   scratch0        ; store W
 
-    ifdef debug       ; if debugging, don't delay
+    ifdef DEBUG_MODE        ; if debugging, don't delay
     return
     endif
 
@@ -3978,7 +3979,7 @@ smallDelay:
 smallDelayA:
     movwf   scratch2        ; store W
 
-    ifdef debug       ; if debugging, don't delay
+    ifdef DEBUG_MODE        ; if debugging, don't delay
     return
     endif
 
@@ -5018,7 +5019,7 @@ clearSSP1IF:
 
 waitForSSP1IFHigh:
 
-    ifdef debug       ; if debugging, don't wait for interrupt to be set high as the MSSP is not
+    ifdef DEBUG_MODE  ; if debugging, don't wait for interrupt to be set high as the MSSP is not
     return            ; simulated by the IDE
     endif
 
@@ -5241,7 +5242,7 @@ notLower:
 
 reallyBigDelay:
 
-    ifdef debug       ; if debugging, don't delay
+    ifdef DEBUG_MODE       ; if debugging, don't delay
     return
     endif
 
@@ -5333,6 +5334,9 @@ setup:
     call    zeroDepth               ; clear the depth position variable
     movlp   high setup              ; set PCLATH back to what it was
 
+    movlw   0x00
+    movwf   flags3
+        
     movlw   0xff
     movwf   switchStates
     movwf   switchStatesPrev
@@ -6681,7 +6685,7 @@ setupSerialPort:
 
 waitForTXIFHigh:
 
-    ifdef debug_on    ; if debugging, don't wait for interrupt to be set high as the MSSP is not
+    ifdef DEBUG_MODE  ; if debugging, don't wait for interrupt to be set high as the MSSP is not
     return            ; simulated by the IDE
     endif
 
@@ -6921,17 +6925,25 @@ handleTimer0Int:
 
 	bcf 	INTCON,T0IF     ; clear the Timer0 overflow interrupt flag
 
-    banksel debounce0
+    banksel flags3
 
-    movf    debounce0,W		; if debounce counter is zero, don't decrement it
-    iorwf   debounce1,W
-    btfsc   STATUS,Z
+    btfss   flags3,DEBOUNCE_ACTIVE  ; if debounce active, decrement counter
     goto    noDebounceDec
 
-    decf	debounce0,F     ; count down debounce timer
-    btfsc   STATUS,Z		; not perfect count down - Z flag set one count before roll-under
-    decf    debounce1,F
+    movlw   .1
+    subwf   debounce0,F
+    btfsc   STATUS,C        ; carry clear = borrow
+    goto    noDecMSB
+    
+    decf	debounce1,F
 
+noDecMSB:
+    
+    movf    debounce0,W     ; catch both bytes zeroed
+    iorwf   debounce1,W
+    btfsc   STATUS,Z
+    bcf     flags3,DEBOUNCE_ACTIVE    
+    
 noDebounceDec:
     
     return
