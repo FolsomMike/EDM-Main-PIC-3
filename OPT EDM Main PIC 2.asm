@@ -1139,7 +1139,7 @@ flipSign:
 ;
 ; Scans the button inputs, returning their state in buttonState and providing debouncing delay.
 ;
-; There are two entry points, scanButtons and scanButtonsQ.
+; There are thee entry points:
 ;
 ;  Entry at scanButtons first performs a long delay which debounces the switch if it was pressed
 ;  recently and gives the user time to release the button before it triggers again.
@@ -1147,18 +1147,17 @@ flipSign:
 ;  Entry at scanButtonsQ performs a shorter delay for use by functions which already have some
 ;  built in delay.
 ;
+; Entry at scanButtonsNoDelay performs no delay.
+;
 ; On entry: no values required
 ;
-; On return button states in buttonState, previous state of buttons in buttonPrev.
+; On exit:
 ;
-; buttonState & buttonPrev bit assignments:
+; switch states (local & remote combined) in switchStates, previous state in switchStatesPrev
+; last reported switch states from remote device in switchStatesRemote
 ;
 
 scanButtons:
-    
-; delay here in case button was previously pushed to provide debounce
-; delay before checking the button so the response will be instant
-; works the same before or after for debounce purposes
 
 ; a button input has changed, so delay to debounce
 
@@ -1167,7 +1166,7 @@ scanButtons:
     movlw   0xff
     call    bigDelayA       ; delay a longer time - give user chance to release button
 
-    goto    skipSB1
+    goto    scanButtonsNoDelay
     
 scanButtonsQ:
 
@@ -1178,11 +1177,11 @@ scanButtonsQ:
     movlw   0x1
     call    bigDelayA       ; delay a short time - calling function is expected to delay some also
     
-skipSB1:
+scanButtonsNoDelay:
 
     movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent    
-    movlp   skipSB1
+    movlp   high scanButtonsNoDelay
         
     movf    switchStates,W          ; store the previous state of the buttons
     movwf   switchStatesPrev
@@ -2030,10 +2029,6 @@ cutNotch:
     bcf     flags,AT_DEPTH  ; clear the depth reached flag
     bsf     flags,UPDATE_DISPLAY ; force display update first time through
 
-    movlw   .0              ; zero the switch debounce timer
-    movwf   debounce0
-    movwf   debounce1      
-
     movlw   ' '				; these variables store the direction symbol (an asterisk)
     movwf   scratch7		; for display to show which direction the head is going
     movlw   ' '				; clear them so garbage won't be displayed first time through
@@ -2062,6 +2057,8 @@ cutLoop:
 
 checkUPDWNButtons:
 
+    call    scanButtonsNoDelay              ; check local & remote switch states
+    
     btfss   switchStates,JOG_UP_SW_FLAG
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
 
@@ -2132,6 +2129,9 @@ moveUpLUCL:
 
 quickRetractCN:
 
+    call    scanButtonsNoDelay       ; check local & remote switch states    
+                                     ; no debounce used
+    
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
@@ -3358,11 +3358,6 @@ not_dwnJM:
     btfsc   switchStates,MODE_SW_FLAG   ; in Setup mode?
     goto    exitJM                      ;exit Jog Mode if not when Select button pressed
 
-; removed because this was a pain - better to be able to zero after a cut - can start a new
-; cut this way without powering down
-;    btfsc   flags,CUT_STARTED   ; if the cut has been started, do not allow operator to zero
-;    goto    exitJM              ;  zero button will exit jog mode instead
-
 ; set the current height as zero
 
     call    zeroDepth       ; clear the depth position variable
@@ -3516,9 +3511,6 @@ clearScreen:
 ;
 ; menuOption contains the number of the currently selected option.
 ; W should contain the maximum menu option number.
-;
-; Uses W, TMR0, OPTION_REG, buttonState, buttonPrev, cursorPos, menuOption,
-;   scratch0, scratch1, scratch2, scratch3, scratch4
 ;
 
 handleMenuInputs:
