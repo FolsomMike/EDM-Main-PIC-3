@@ -593,6 +593,8 @@ BLINK_ON_FLAG			EQU		0x01
     switchStatesPrev        ; state of switches the last time they were scanned
                             ; bit assignments same as for buttonState
 
+    switchStatesRemote      ; switch states reported by remote device such as User Interface Board
+                            
     eepromAddressL		    ; use to specify address to read or write from EEprom
     eepromAddressH          ; high byte
     eepromCount	        	; use to specify number of bytes to read or write from EEprom
@@ -1154,7 +1156,7 @@ flipSign:
 ;
 
 scanButtons:
-
+    
 ; delay here in case button was previously pushed to provide debounce
 ; delay before checking the button so the response will be instant
 ; works the same before or after for debounce purposes
@@ -1176,9 +1178,13 @@ scanButtonsQ:
     movwf   scratch1
     movlw   0x1
     call    bigDelayA       ; delay a short time - calling function is expected to delay some also
-
+    
 skipSB1:
 
+    movlp   high handleReceivedDataIfPresent
+    call    handleReceivedDataIfPresent    
+    movlp   skipSB1
+        
     movf    switchStates,W          ; store the previous state of the buttons
     movwf   switchStatesPrev
 
@@ -1186,6 +1192,9 @@ skipSB1:
     movwf   switchStates
 
     call    trapSwitchInputs        ; check all switches and store their states
+    
+    movf    switchStatesRemote,W    ; combine the states from the local and remote switches
+    andwf   switchStates,F          ;  a zero from either will result in zero (switch active)
     
     return
 
@@ -5327,6 +5336,7 @@ setup:
     movlw   0xff
     movwf   switchStates
     movwf   switchStatesPrev
+    movwf   switchStatesRemote
     
     call    readFlagsFromEEprom     ; read the value stored for flags from the EEProm
 
@@ -6263,20 +6273,20 @@ dF1Loop:
 ;--------------------------------------------------------------------------------------------------
 ; handleSwitchStatesPacket
 ;
-; Stores the switch states byte in switchStates for access by the program. The switchStates variable
-; reflects the on/off state of the various switches.
+; Stores the switch states reported by the remote device via serial link, such as the User Interface
+; board.
 ;
 ; On Entry:
 ;
-;   FSR0 points to serialRcvBuf
+;   FSR1 points to serialRcvBuf
 ; 
 
 handleSwitchStatesPacket:
 
-    moviw   1[FSR0]                     ; get the switch state value from the packet
+    moviw   1[FSR1]                     ; get the switch state value from the packet
 
-    banksel switchStates
-    movwf   switchStates                ; store the switch states
+    banksel switchStatesRemote
+    movwf   switchStatesRemote          ; store the switch states
 
     return
 
