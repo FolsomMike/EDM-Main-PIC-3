@@ -3790,8 +3790,6 @@ displayTarget:
 ; FSR1 contains address of BCD variable.
 ; Bank points to scratch* variables.
 ;
-; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5
-;
 
 displayBCDVar:
     
@@ -3799,7 +3797,7 @@ displayBCDVar:
     addlw   0x30            ; convert BCD digit to ASCII
     call    writeChar       ; write the first digit
 
-    movlw   0x2e            
+    movlw   '.'            
     call    writeChar       ; write decimal point
 
     movlw   .3              
@@ -7229,9 +7227,9 @@ string12    dw	'Z','e','r','o',' ','o','r',' ','E','x','i','t',0x00
 string13    dw	'O','P','T',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
 string14    dw	'T','u','r','n',' ','o','n',' ','C','u','t',' ','V','o','l','t','a','g','e',0x00
 string15    dw	'U','p',' ',' ',' ','S','p','e','e','d','>',0x00
-string16    dw	'D','o','w',   'n',' ',' ','S','t','o','p','>',0x00
-string17    dw	'N','o','t',   'c','h',' ','M','o','d','e',0x00
-string18    dw	'W','a','l',   'l',' ','M','o','d','e',0x00
+string16    dw	'D','o','w','n',' ',' ','S','t','o','p','>',0x00
+string17    dw	'N','o','t','c','h',' ','M','o','d','e',0x00
+string18    dw	'W','a','l','l',' ','M','o','d','e',' ',0x00
 string19    dw	'C','y','c','l','e',' ','T','e','s','t',0x00
 string20    dw	'5',' ','-',' ','M','o','t','o','r',' ','D','i','r',' ',0x00
 string21    dw	'4',' ','-',' ',0x00
