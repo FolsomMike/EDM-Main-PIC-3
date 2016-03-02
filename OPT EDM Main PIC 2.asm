@@ -497,7 +497,7 @@ SERIAL_PACKET_READY EQU 3
 
 ; bits in flags3 variable
 
-EROSION_MODE    EQU     1
+EROSION_MODE    EQU     0
 DEBOUNCE_ACTIVE EQU     1
     
 ; bits in statusFlags variable
