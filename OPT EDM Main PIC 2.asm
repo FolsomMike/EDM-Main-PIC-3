@@ -633,8 +633,8 @@ BLINK_ON_FLAG			EQU		0x01
     pwmPolarity             ; polarity of the PWM output -- only lsb used
     pwmCheckSum             ; used to verify PWM values read from eeprom
 
-    debounce1               ; switch debounce timer decremented by the interrupt routine
-    debounce0
+    debounceH               ; switch debounce timer decremented by the interrupt routine
+    debounceL
 
     normDelay               ; delay between motor pulses for normal mode (slow)
     setupDelay              ; delay between motor pulses for setup mode (fast)
@@ -1159,15 +1159,9 @@ flipSign:
 ;
 ; Scans the switch inputs, returning their state and providing debouncing delay.
 ;
-; There are thee entry points:
-;
-;  Entry at processIO first performs a long delay which debounces the switch if it was pressed
-;  recently and gives the user time to release the button before it triggers again.
-;
-;  Entry at processIOQuick performs a shorter delay for use by functions which already have some
-;  built in delay.
-;
-; Entry at processIONoDelay performs no delay.
+; Each switch input is turned back off by this function on the following call so the calling
+; functions only see a single pulse for each switch closure. If the user holds the button down long
+; enough, it will begin to repeat at a rate controlled by the debounce timer.
 ;
 ; On entry: no values required
 ;
@@ -1178,33 +1172,25 @@ flipSign:
 ;
 
 processIO:
+
+    banksel switchStates
+    movlw   0x0e                    ; only allow one pulse per switch
+    iorwf   switchStates,F          ; enter at processIOQwkRpt for fast repeating
+                                                                        
+;    call    sendDataIfReady         ; send output states to remote devices if xmt buffer is ready
+                                    ; wip mks -- this does not wait for transmission complete
+                                    ;  if a LCD transmit is done immediately thereafter will it
+                                    ; be corrupted? Do LCD transmits need to wait until buffer is
+                                    ; clear?
     
-    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
-
-; a button input has changed, so delay to debounce
-    
-    banksel flags
-    movlw   0x0
-    movwf   scratch1
-    movlw   0xff
-    call    bigDelayA       ; delay a longer time - give user chance to release button
-
-    goto    processIONoDelay
-    
-processIOQuick:
-
-    ; short delay
-
-    movlw   0x0
-    movwf   scratch1
-    movlw   0x1
-    call    bigDelayA       ; delay a short time - calling function is expected to delay some also
-    
-processIONoDelay:
-
+processIOQwkRpt:
+                                    
     movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent    
-    movlp   high processIONoDelay
+    movlp   high processIO
+
+    btfsc   flags3,DEBOUNCE_ACTIVE  ; bail out if debounce timer is active
+    return
         
     movf    switchStates,W          ; store the previous state of the buttons
     movwf   switchStatesPrev
@@ -1216,7 +1202,22 @@ processIONoDelay:
     
     movf    switchStatesRemote,W    ; combine the states from the local and remote switches
     andwf   switchStates,F          ;  a zero from either will result in zero (switch active)
+
+    ; if the switch states changed, start debounce timer -- switches will not be checked again
+    ; until the timer controlled by an interrupt routine is finished
     
+    movf    switchStates,W                  ; check if new state same as old state
+    subwf   switchStatesPrev,W
+    btfsc   STATUS,Z
+    return
+
+    movlw   0x21                          ; set and start the debounce timer
+    movwf   debounceH    
+    movlw   0x75                            
+    movwf   debounceL
+    
+    bsf     flags3,DEBOUNCE_ACTIVE
+
     return
 
 ; end of processIONoDelay
@@ -1231,7 +1232,7 @@ processIONoDelay:
 sendDataIfReady:
 
     banksel flags                   ; limit rate of sending to allow receiving PICS enough time
-    decfsz  xmtDataTimer
+    decfsz  xmtDataTimer,F
     return
 
     banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states again
@@ -2099,14 +2100,9 @@ cutLoop:
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
-    ; check buttons if debounce timer not active
-
-    btfsc   flags3,DEBOUNCE_ACTIVE
-    goto    checkHiLimit                    ; debouncing, don't check buttons
-
 checkUPDWNButtons:
 
-    call    processIONoDelay               ; check local & remote switch states
+    call    processIO               ; check local & remote switch states
     
     btfss   switchStates,JOG_UP_SW_FLAG
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
@@ -2178,11 +2174,10 @@ moveUpLUCL:
 
 quickRetractCN:
 
-    call    processIONoDelay         ; check local & remote switch states    
-                                     ; no debounce used
+    call    processIO              ; check local & remote switch states
     
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCN          ; exit the notch cutting mode if the reset button pressed
+    goto    exitCN                  ; exit the notch cutting mode if the reset button pressed
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
     
@@ -2777,13 +2772,6 @@ processValueAS:
     bsf     flags,DATA_MODIFIED     ; set flag so values will be saved
     bsf     flags,UPDATE_DISPLAY    ; set flag so display will be updated
 
-    movlw   0x45                            ; start the switch debounce timer at 0x1145
-    movwf   debounce0
-    movlw   0x11
-    movwf   debounce1
-    
-    bsf     flags3,DEBOUNCE_ACTIVE
-
     return
 
 ; end of adjustSpeedUp and adjustSpeedDown
@@ -2868,13 +2856,6 @@ apuExit:
     
     bsf     flags,DATA_MODIFIED             ; set flag so values will be saved
     bsf     flags,UPDATE_DISPLAY            ; set flag so display will be updated
-
-    movlw   0x45                            ; start the switch debounce timer at 0x1145
-    movwf   debounce0
-    movlw   0x11
-    movwf   debounce1
-    
-    bsf     flags3,DEBOUNCE_ACTIVE
 
     return
 
@@ -3137,7 +3118,7 @@ setCutMode:
     call    flushXmtWaitPrep    ; force the buffer to print and wait until done then prep for next
 
 loopSCM:
-
+    
     call    processIO       ; watch for user input
 
     btfsc   switchStates,JOG_UP_SW_FLAG
@@ -3322,6 +3303,10 @@ updateABD:
 
 jogMode:
 
+    call    processIO           ; call again to clear the Select switch as the reset of this
+                                ; function calls processIOQwkRpt for faster response to the
+                                ; Up/Down switch and the Select switch bounce will exit immediately
+    
 ; set up the display
 
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
@@ -3366,8 +3351,12 @@ jogMode:
 
 loopJM:
 
-    call    processIOQuick  ; monitor user input - Q entry point for short delay so motor runs
-                            ; faster
+    movlw   0x0             ; delay to control motor speed
+    movwf   scratch1
+    movlw   0x1
+    call    bigDelayA
+
+    call    processIOQwkRpt ; process inputs and outputs
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    chk_dwnJM       ; skip if Up switch not pressed
@@ -7084,16 +7073,16 @@ handleTimer0Int:
     goto    noDebounceDec
 
     movlw   .1
-    subwf   debounce0,F
+    subwf   debounceL,F
     btfsc   STATUS,C        ; carry clear = borrow
     goto    noDecMSB
     
-    decf	debounce1,F
+    decf	debounceH,F
 
 noDecMSB:
     
-    movf    debounce0,W     ; catch both bytes zeroed
-    iorwf   debounce1,W
+    movf    debounceH,W     ; catch both bytes zeroed
+    iorwf   debounceL,W
     btfsc   STATUS,Z
     bcf     flags3,DEBOUNCE_ACTIVE    
     
