@@ -419,6 +419,7 @@ JOGDWN_P                EQU     PORTA
 MODE_SW                 EQU     RC1
 JOG_UP_SW               EQU     RC2
 SELECT_SW               EQU		RC7
+AC_PWR_OK_SIGNAL        EQU     RC7     ; only when using User Interface Board               
 ELECTRODE_PWR_SW        EQU     RC4
 JOG_DOWN_SW             EQU     RA0
 
@@ -426,9 +427,10 @@ JOG_DOWN_SW             EQU     RA0
 
 MODE_SW_FLAG            EQU     0
 JOG_UP_SW_FLAG          EQU     1
-SELECT_SW_FLAG          EQU     2
-ELECTRODE_PWR_SW_FLAG   EQU     3
-JOG_DOWN_SW_FLAG        EQU     4
+JOG_DOWN_SW_FLAG        EQU     2          
+SELECT_SW_FLAG          EQU     3
+ELECTRODE_PWR_SW_FLAG   EQU     4
+AC_OK_FLAG              EQU     5
 
 ;bits in outputStates variable
 
@@ -595,7 +597,9 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit assignments same as for buttonState
 
     switchStatesRemote      ; switch states reported by remote device such as User Interface Board
-                            
+
+    outputStates            ; state of the outputs
+    
     eepromAddressL		    ; use to specify address to read or write from EEprom
     eepromAddressH          ; high byte
     eepromCount	        	; use to specify number of bytes to read or write from EEprom
@@ -1135,19 +1139,23 @@ flipSign:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; scanButtons
+; processIO
 ;
-; Scans the button inputs, returning their state in buttonState and providing debouncing delay.
+; Handles inputs and outputs.
+;
+; Sends the output states to the remote devices if the serial transmit buffer is ready.
+;
+; Scans the switch inputs, returning their state and providing debouncing delay.
 ;
 ; There are thee entry points:
 ;
-;  Entry at scanButtons first performs a long delay which debounces the switch if it was pressed
+;  Entry at processIO first performs a long delay which debounces the switch if it was pressed
 ;  recently and gives the user time to release the button before it triggers again.
 ;
-;  Entry at scanButtonsQ performs a shorter delay for use by functions which already have some
+;  Entry at processIOQuick performs a shorter delay for use by functions which already have some
 ;  built in delay.
 ;
-; Entry at scanButtonsNoDelay performs no delay.
+; Entry at processIONoDelay performs no delay.
 ;
 ; On entry: no values required
 ;
@@ -1157,18 +1165,21 @@ flipSign:
 ; last reported switch states from remote device in switchStatesRemote
 ;
 
-scanButtons:
+processIO:
+    
+    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
 
 ; a button input has changed, so delay to debounce
-
+    
+    banksel flags
     movlw   0x0
     movwf   scratch1
     movlw   0xff
     call    bigDelayA       ; delay a longer time - give user chance to release button
 
-    goto    scanButtonsNoDelay
+    goto    processIONoDelay
     
-scanButtonsQ:
+processIOQuick:
 
     ; short delay
 
@@ -1177,11 +1188,11 @@ scanButtonsQ:
     movlw   0x1
     call    bigDelayA       ; delay a short time - calling function is expected to delay some also
     
-scanButtonsNoDelay:
+processIONoDelay:
 
     movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent    
-    movlp   high scanButtonsNoDelay
+    movlp   high processIONoDelay
         
     movf    switchStates,W          ; store the previous state of the buttons
     movwf   switchStatesPrev
@@ -2057,7 +2068,7 @@ cutLoop:
 
 checkUPDWNButtons:
 
-    call    scanButtonsNoDelay              ; check local & remote switch states
+    call    processIONoDelay               ; check local & remote switch states
     
     btfss   switchStates,JOG_UP_SW_FLAG
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
@@ -2129,7 +2140,7 @@ moveUpLUCL:
 
 quickRetractCN:
 
-    call    scanButtonsNoDelay       ; check local & remote switch states    
+    call    processIONoDelay         ; check local & remote switch states    
                                      ; no debounce used
     
     btfss   switchStates,SELECT_SW_FLAG
@@ -3089,7 +3100,7 @@ setCutMode:
 
 loopSCM:
 
-    call    scanButtons     ; watch for user input
+    call    processIO       ; watch for user input
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upSCM      ; skip if Up switch not pressed
@@ -3151,7 +3162,7 @@ adjustBCDDigit:
 
 loopABD:
 
-    call    scanButtons     ; watch for user input
+    call    processIO       ; watch for user input
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upABD      ; skip if Up switch not pressed
@@ -3279,7 +3290,7 @@ jogMode:
 
 loopJM:
 
-    call    scanButtonsQ    ; monitor user input - Q entry point for short delay so motor runs
+    call    processIOQuick  ; monitor user input - Q entry point for short delay so motor runs
                             ; faster
 
     btfsc   switchStates,JOG_UP_SW_FLAG
@@ -3529,7 +3540,7 @@ loopHMMI:
 	btfsc	menuOption,6
 	return
 
-    call    scanButtons     ; watch for user input
+    call    processIO        ; watch for user input
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upHMMI     ; skip if Up switch not pressed
@@ -6264,6 +6275,98 @@ dF1Loop:
 ; end of debugFunc1
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; sendDataIfReady
+;
+; Sends data when the serial transmit buffer is empty.
+;
+
+sendDataIfReady:
+
+    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states again
+    movf    serialXmtBufNumBytes,W
+    btfsc   STATUS,Z
+    goto    sendOutputStates
+
+    return
+
+; end of sendDataIfReady
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; sendOutputStates
+;
+; Sends the appropriate output states via the serial port to a remote device such as the User
+; Interface board.
+;
+; On Entry:
+;
+; On Exit:
+;
+
+sendOutputStates:
+
+    call    setupOutputStatesPacket    
+
+    banksel outputStates                ; start with all outputs off
+    movlw   0xff
+    movwf   outputStates
+
+    btfss   MODE_JOGUP_SEL_EPWR_P, AC_PWR_OK_SIGNAL
+    bcf     outputStates, AC_OK_LED_FLAG
+
+    btfsc   SHORT_DETECT_P, SHORT_DETECT        ; buzzer and Short LED on when short detected
+    goto    noShortDetected
+    
+    bcf     outputStates, BUZZER_FLAG
+    bcf     outputStates, SHORT_LED_FLAG
+    
+noShortDetected:    
+    
+    banksel outputStates
+    movf    outputStates,W
+    
+    call    writeByteToSerialXmtBuf    
+    
+    call    startSerialPortTransmit
+
+    return
+
+; end of sendOutputStates
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; setupOutputStatesPacket
+;
+; Prepares the serial transmit buffer with header, length byte of 3, and command SET_OUTPUTS_CMD.
+; The data to be sent can then be added to the packet.
+;
+; Before the packet is transmitted, the length byte should be replaced with the actual number of
+; bytes which have been added to the packet.
+;
+; On Entry:
+;
+; On Exit:
+;
+; packet is stuffed with header, length value of 3, and command byte
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+;
+    
+setupOutputStatesPacket:
+
+    movlw   SET_OUTPUTS_CMD           ; packet command byte
+    
+    movlp   high setupSerialXmtPkt
+    call    setupSerialXmtPkt
+    movlp   high setupOutputStatesPacket
+
+    banksel flags
+
+    return
+
+; end of setupOutpuStatesPacket
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; handleSwitchStatesPacket
 ;
