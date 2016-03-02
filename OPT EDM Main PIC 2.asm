@@ -591,6 +591,8 @@ BLINK_ON_FLAG			EQU		0x01
                             
     menuOption              ; tracks which menu option is currently selected
 
+    xmtDataTimer            ; used to control rate of data sending
+    
     switchStates
 
     switchStatesPrev        ; state of switches the last time they were scanned
@@ -1177,7 +1179,7 @@ flipSign:
 
 processIO:
     
-;debug mks    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
+    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
 
 ; a button input has changed, so delay to debounce
     
@@ -1217,9 +1219,35 @@ processIONoDelay:
     
     return
 
-; end of scanButtons
+; end of processIONoDelay
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; sendDataIfReady
+;
+; Sends data when the serial transmit buffer is empty.
+;
+
+sendDataIfReady:
+
+    banksel flags                   ; limit rate of sending to allow receiving PICS enough time
+    decfsz  xmtDataTimer
+    return
+
+    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states again
+    movf    serialXmtBufNumBytes,W
+    btfss   STATUS,Z
+    return
+    
+    movlp   high sendOutputStates
+    call    sendOutputStates
+    movlp   high sendDataIfReady
+    
+    return
+
+; end of sendDataIfReady
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; zeroDepth
 ;
@@ -5383,9 +5411,9 @@ setup:
     call    zeroDepth               ; clear the depth position variable
     movlp   high setup              ; set PCLATH back to what it was
 
-    movlw   0x00
-    movwf   flags3
-        
+    clrf   flags3
+    clrf    xmtDataTimer
+    
     movlw   0xff
     movwf   switchStates
     movwf   switchStatesPrev
@@ -6322,24 +6350,6 @@ dF1Loop:
 
 ; end of debugFunc1
 ;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; sendDataIfReady
-;
-; Sends data when the serial transmit buffer is empty.
-;
-
-sendDataIfReady:
-
-    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states again
-    movf    serialXmtBufNumBytes,W
-    btfsc   STATUS,Z
-    goto    sendOutputStates
-
-    return
-
-; end of sendDataIfReady
-;--------------------------------------------------------------------------------------------------
     
 ;--------------------------------------------------------------------------------------------------
 ; sendOutputStates
@@ -6374,8 +6384,10 @@ noShortDetected:
     banksel outputStates
     movf    outputStates,W
     
+    movlp   high writeByteToSerialXmtBuf
     call    writeByteToSerialXmtBuf    
     
+    movlp   high startSerialPortTransmit
     call    startSerialPortTransmit
 
     return
