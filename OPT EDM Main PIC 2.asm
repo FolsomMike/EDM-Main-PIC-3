@@ -238,7 +238,7 @@
 ; stimulus and performing various other actions which make the simulation run properly.
 ; Search for "DEBUG_MODE" to find all examples of such code.
 
-#define DEBUG_MODE 1     ; set DEBUG_MODE testing "on" ;//debug mks -- comment this out later
+;#define DEBUG_MODE 1     ; set DEBUG_MODE testing "on" ;//debug mks -- comment this out later
 
 ; Values for the digital pot settings.
 ;
@@ -815,7 +815,12 @@ SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
 
  cblock	0x70
 
- 
+    BANKSEL_TEMP
+    FSR0H_TEMP
+    FSR0L_TEMP
+    FSR1H_TEMP
+    FSR1L_TEMP
+
  endc
 
 ; end of Variables in RAM
@@ -921,8 +926,13 @@ trapSwitchInputs:
     btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
     bcf     switchStates,JOG_UP_SW_FLAG
 
-    btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
-    bcf     switchStates,SELECT_SW_FLAG
+; Select switch input is ignored here...for boards connected to a User Interface board, R84 is
+; installed which allows the Cutting Current Power Supply's AC OK output to be read via this input.
+; The signal is no longer valid as the Select switch. That switch is now connected to the User
+; Interface board which will report its state via serial transmission.
+;
+;    btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
+;    bcf     switchStates,SELECT_SW_FLAG
 
     btfss   MODE_JOGUP_SEL_EPWR_P,ELECTRODE_PWR_SW
     bcf     switchStates,ELECTRODE_PWR_SW_FLAG
@@ -1167,7 +1177,7 @@ flipSign:
 
 processIO:
     
-    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
+;debug mks    call    sendDataIfReady ; send output states to remote devices if xmt buffer is ready
 
 ; a button input has changed, so delay to debounce
     
@@ -3145,6 +3155,42 @@ skip_dwnSCM:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; pushFSR1
+;
+; Saves FSR1 to temporary variables.
+;
+  
+pushFSR1:    
+
+    movf    FSR1H,W
+    movwf   FSR1H_TEMP
+    movf    FSR1L,W
+    movwf   FSR1L_TEMP
+
+    return
+    
+; pushFSR1
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; popFSR1
+;
+; Loads FSR1 from temporary variables.
+;
+  
+popFSR1:
+
+    movf    FSR1H_TEMP,W
+    movwf   FSR1H
+    movf    FSR1L_TEMP,W    
+    movwf   FSR1L
+
+    return
+    
+; popFSR1
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
 ; adjustBCDDigit
 ;
 ; This function allows the user to adjust the value of a BCD digit.
@@ -3161,9 +3207,11 @@ skip_dwnSCM:
 adjustBCDDigit:
 
 loopABD:
-
+    
+    call    pushFSR1
     call    processIO       ; watch for user input
-
+    call    popFSR1
+    
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    skip_upABD      ; skip if Up switch not pressed
 
