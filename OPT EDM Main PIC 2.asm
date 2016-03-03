@@ -1278,8 +1278,6 @@ sendOutputStatesIfReady:
 ;
 ; On entry:
 ;
-; Uses FSR0, W
-;
 
 zeroDepth:
 
@@ -1445,8 +1443,6 @@ waitXmtPrep:
 ; Carriage Return
 ;
 ; It then processes user input.
-;
-; Uses W, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6 (wip - needs updating)
 ;
 ; NOTE: LCD addressing is screwy - second line first column is 0xC0, third line is 0x94,
 ;       fourth line is 0xd4.
@@ -1648,8 +1644,6 @@ exitDEMM7:
 ;
 ; It then processes user input.
 ;
-; Uses W, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
-;
 ; NOTE: LCD addressing is screwy - second line first column is 0xC0, third line is 0x94,
 ;       fourth line is 0xd4.
 ;
@@ -1845,8 +1839,6 @@ skipDMM3:
 ; Carriage Return (to place cursor on first option)
 ;
 ; It then processes user input.
-;
-; Uses W, scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
 ;
 ; NOTE: LCD addressing is screwy - second line first column is 0xC0, third line is 0x94,
 ;       fourth line is 0xd4.
@@ -2069,9 +2061,6 @@ skipDMMP27:
 ;
 ; position contains current height of the cutting blade
 ; depth contains the desired depth of the cut
-;
-; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, preScaler,
-; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
 ;
 ; For notch cutting mode switch out the smart code on retract.
 ;
@@ -2384,8 +2373,6 @@ setupCutNotchAndCycleTest:
 ;
 ; On entry:
 ;
-; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, preScaler,
-; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7, scratch8
 ;
 
 cycleTest:
@@ -2709,8 +2696,6 @@ adjustSpeedOrPowerDown:
 ; If jog up then speed is increased by one, rolling from 9 to 1 if appropriate.
 ; If jog down then speed is decreased by one, rolling from 1 to 9 if appropriate.
 ;
-; Uses W, speedValue, sparkLevel, sparkLevelNotch, sparkLevelWall
-;
 ; speedValue range is 1-9 which is converted to sparkLevel range of 0x01-0x11
 ;
 ; Thus, speedValue of 1 gives sparkLevel of 0x01; 2 gives 0x03; 3 gives 0x05, etc.
@@ -2955,8 +2940,6 @@ pMUWD1:
 ;   or
 ;       bsf     MOTOR,DIR_SEL
 ;
-; Uses W, FSR0, PCLATH, scratch0, scratch1, scratch2, scratch3
-;
 ; NOTE: The delay value of .15 worked for both standard and extended heads.  The cut rate
 ; for the extended head was about 50% too slow compared to desired rate of 0.001 per minute.
 ; The burn was very consistent and customer wanted to try paralleling the power supplies
@@ -3010,9 +2993,6 @@ pulseMotorNoDelay:
 ; editable. The editable/ignored digits are:
 ;       nEEEEnnnnnn
 ;   where n represents non-editable digits while E represents editable digits.
-; 
-; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, depth, buttonState, buttonPrev,
-; 	scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6, scratch7
 ; 
 
 setTarget:
@@ -3231,9 +3211,6 @@ popFSR1:
 ; FSR1 = memory address of the digit
 ; cursorPos = screen location of the digit
 ;
-; Uses W, FSR0, buttonState, buttonPrev, cursorPos
-;     scratch0, scratch1, scratch2, scratch3, scratch7
-;
 
 adjustBCDDigit:
 
@@ -3319,9 +3296,6 @@ updateABD:
 ; exits the Jog Mode, in "Setup" mode, the Reset/Enter/Zero button zeroes the displayed position
 ; of the height.
 ; 
-; Uses W, FSR0, PCLATH, TMR0, OPTION_REG, cursorPos, flags, position buttonState, buttonPrev,
-; preScaler scratch0, scratch1, scratch2, scratch3, scratch4, scratch5, scratch6
-;
 
 jogMode:
 
@@ -3547,8 +3521,6 @@ exitJM:
 ;
 ; Bank will point to flags.
 ;
-; Uses W, FSR0, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, scratch4
-;
 
 displayPos:
 
@@ -3678,8 +3650,6 @@ skip_dwnHMMI:
 ;
 ; On return, menuOption contains the newly selected option.
 ;
-; Uses W, TMR0, OPTION_REG, menuOption, scratch0, scratch1, scratch2, scratch3
-;
 
 selectHigherOption:
 
@@ -3767,8 +3737,6 @@ line4SHO:                   ; don't move cursor if at the top
 ; W contains the maximum allowable option number.
 ;
 ; On return, menuOption contains the newly selected option.
-;
-; Uses W, TMR0, OPTION_REG, menuOption, scratch0, scratch1, scratch2, scratch3
 ;
 
 selectLowerOption:
@@ -3948,8 +3916,6 @@ loopDBV1:
 ;
 ; On exit:
 ;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3, sparkValue
-;
 ; WIP NOTE: The speed display value is parsed from the sparkLevel setting while the power display
 ; is parsed much more simple from the powerLevel variable.
 ; Couldn't speedLevel be used in a similar manner (and faster) rather than parsing from sparkLevel?
@@ -4023,7 +3989,6 @@ SetBank0ClrWDT:
 ;  C bit will be set until LSB goes from 0 to 255; 0 is only value added to 0xff that won't carry
 ;  When C bit not set, subtract 1 from MSB until it reaches 0
 ;
-; Uses W, scratch0, scratch1, scratch2, scratch3
 ;
 
 bigDelay:
@@ -4065,8 +4030,6 @@ loopBD1:
 ;
 ; On entry at smallDelay, W holds LSB of delay value, MSB will be 0.
 ; On entry at smallDelayA, scratch3:W holds delay value.
-;
-; Uses scratch2, scratch3
 ;
 
 smallDelay:
@@ -4162,8 +4125,6 @@ msD1Loop3:
 ;
 ; X word : scratch1:scratch0
 ; Y word : scratch3:w
-;
-; Uses W, scratch0, scratch1, scratch2, scratch3, scratch4
 ;
 
 isXgtY:
@@ -4282,8 +4243,6 @@ isDepthGreaterThanTarget:
 ;
 ; Bank will point to flags.
 ;
-; Uses W, FSR0
-;
 
 incDepth:
 
@@ -4333,8 +4292,6 @@ negativeIBV:
 ;
 ; Bank will point to flags.
 ;
-; Uses W, FSR0
-;
 
 decDepth:
 
@@ -4376,8 +4333,6 @@ negativeDBV:
 ;
 ; On entry:
 ;
-; Uses W, FSR0, FSR1
-;
 
 incDepthAbs:
 
@@ -4405,8 +4360,6 @@ incDepthAbs:
 ;
 ; On entry:
 ;
-; Uses W, FSR0, FSR1
-;
 
 decDepthAbs:
 
@@ -4431,8 +4384,6 @@ decDepthAbs:
 ; copyBytes
 ;
 ; Copies the number of bytes specified by W from FSR0 to FSR1.
-;
-; Uses W, FSR0, FSR1, scratch1
 ;
 ; On entry:
 ;
@@ -4463,8 +4414,6 @@ cBLoop1:
 ;
 ; Adds two unpacked BCD variables together, ignoring sign.
 ; Carry from most significant digit will be ignored.
-;
-; Uses W, FSR0, FSR1, scratch1
 ;
 ; On entry:
 ;
@@ -4522,8 +4471,6 @@ aB6BV1:
 ;
 ; Subtracts two unpacked BCD variables, ignoring sign.
 ; Borrow to most significant digit will be ignored.
-;
-; Uses W, FSR0, FSR1, scratch1
 ;
 ; On entry:
 ;
@@ -4583,8 +4530,6 @@ sB6BV1:
 ;
 ; On return, Z = 1 if variable is zero.
 ;
-; Uses W, FSR
-;
 
 isDepthZero:
 
@@ -4609,8 +4554,6 @@ isDepthZero:
 ;
 ;   Z = 1 if variable is zero.
 ;
-; Uses W, FSR
-;
 
 isTargetZero:
 
@@ -4634,8 +4577,6 @@ isTargetZero:
 ; FSR0 points to first byte of variable.
 ;
 ; On return, Z = 1 if variable is zero.
-;
-; Uses W, FSR
 ;
 
 isZero:
@@ -4777,8 +4718,6 @@ flushAndWaitSerialXmt:
 ;
 ; The command stored in the LCD print buffer after any data already in the buffer.
 ;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
-;
 ; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
 ; this function, call flushLCD or printString to flush the buffer.
 ;
@@ -4801,8 +4740,6 @@ turnOffBlink:
 ; The cursor is also turned off.
 ;
 ; The command is stored in the LCD print buffer after any data already in the buffer.
-;
-; Uses W, TMR0, OPTION_REG, scratch0, scratch1, scratch2, scratch3
 ;
 ; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
 ; this function, call flushLCD or printString to flush the buffer.
