@@ -1177,7 +1177,7 @@ processIO:
     movlw   0x0e                    ; only allow one pulse per switch
     iorwf   switchStates,F          ; enter at processIOQwkRpt for fast repeating
                                                                         
-;    call    sendDataIfReady         ; send output states to remote devices if xmt buffer is ready
+    call    sendDataIfReady         ; send output states to remote devices if xmt buffer is ready
                                     ; wip mks -- this does not wait for transmission complete
                                     ;  if a LCD transmit is done immediately thereafter will it
                                     ; be corrupted? Do LCD transmits need to wait until buffer is
@@ -1228,6 +1228,21 @@ processIOQwkRpt:
 ;
 ; Sends data when the serial transmit buffer is empty.
 ;
+; Sets up buffer for a SET_OUTPUTS_CMD and adds appropriate data. All data in the buffer is then
+; begun to be transmitted.
+;
+; Waits for transmission to be completed.
+;
+; Sets up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
+;  packet).
+;
+; Since LCD_BLOCK_CMD packets the most common packet sent and the buffer must be prepared for
+; various data insertions, this function leaves the buffer prepared for that packet type.
+;
+; On entry:
+;
+; FSR1 points to the desired string
+;
 
 sendDataIfReady:
 
@@ -1235,7 +1250,7 @@ sendDataIfReady:
     decfsz  xmtDataTimer,F
     return
 
-    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states again
+    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states
     movf    serialXmtBufNumBytes,W
     btfss   STATUS,Z
     return
@@ -1243,6 +1258,10 @@ sendDataIfReady:
     movlp   high sendOutputStates
     call    sendOutputStates
     movlp   high sendDataIfReady
+
+    call    waitSerialXmtComplete   ; wait until buffer printed
+
+    call    setupLCDBlockPkt        ; prepare xmt buffer for the next block transmit
     
     return
 
@@ -1327,7 +1346,7 @@ setupLCDBlockPkt:
 ;
 ; Waits for transmission to be completed.
 ;
-; Setups up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
+; Sets up the serial transmission buffer in preparation for the next printString (LCD_BLOCK_CMD
 ;  packet).
 ;
 ; On entry:
@@ -6359,18 +6378,21 @@ sendOutputStates:
     movlw   0xff
     movwf   outputStates
 
-    btfss   MODE_JOGUP_SEL_EPWR_P, AC_PWR_OK_SIGNAL
+    btfsc   MODE_JOGUP_SEL_EPWR_P, AC_PWR_OK_SIGNAL ; signal input high to turn on LED
     bcf     outputStates, AC_OK_LED_FLAG
 
+    bcf     outputStates, AC_OK_LED_FLAG    ;debug mks
+    
     btfsc   SHORT_DETECT_P, SHORT_DETECT        ; buzzer and Short LED on when short detected
     goto    noShortDetected
     
     bcf     outputStates, BUZZER_FLAG
     bcf     outputStates, SHORT_LED_FLAG
-    
+
 noShortDetected:    
-    
-    banksel outputStates
+
+    bcf     outputStates, SHORT_LED_FLAG    ;debug mks        
+
     movf    outputStates,W
     
     movlp   high writeByteToSerialXmtBuf
