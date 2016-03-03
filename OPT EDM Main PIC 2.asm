@@ -574,7 +574,7 @@ BLINK_ON_FLAG			EQU		0x01
 
     flags3                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
                             ; bit 1: 0 = debounce timer, inactive 1 = timer active
-                            ; bit 2:
+                            ; bit 2: 0 = no time criticality, 1 = time critical operation
                             ; bit 3:
                             ; bit 4:
                             ; bit 5:
@@ -637,6 +637,10 @@ BLINK_ON_FLAG			EQU		0x01
     debounceH               ; switch debounce timer decremented by the interrupt routine
     debounceL
 
+    msDelayCnt
+    bigDelayCnt
+    smallDelayCnt
+    
     normDelay               ; delay between motor pulses for normal mode (slow)
     setupDelay              ; delay between motor pulses for setup mode (fast)
 
@@ -1175,8 +1179,8 @@ flipSign:
 processIO:
 
     banksel switchStates
-    movlw   0x0e                    ; only allow one pulse per switch
-    iorwf   switchStates,F          ; enter at processIOQwkRpt for fast repeating
+    movlw   0x0e                    ; only allow one pulse per switch closure
+    iorwf   switchStates,F
                                                                         
     call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready
     
@@ -3323,6 +3327,9 @@ updateABD:
 
 jogMode:
 
+    movlw   .255                ; delay 255 milliseconds to allow user to release the Select button
+    call    msDelay             ;  as this function disables switch debouncing
+    
     call    processIO           ; call again to clear the Select switch as the reset of this
                                 ; function calls processIOQwkRpt for faster response to the
                                 ; Up/Down switch and the Select switch bounce will exit immediately
@@ -3379,6 +3386,7 @@ loopJM:
     movlw   0x1
     call    bigDelayA
 
+    bcf     flags3,DEBOUNCE_ACTIVE
     call    processIOQwkRpt ; process inputs and outputs
 
     btfsc   switchStates,JOG_UP_SW_FLAG
@@ -4093,6 +4101,59 @@ loopSD1:
 ; end of smallDelay
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; msDelay
+;
+; Creates a delay of x milliseconds where x is specified in the W register.
+;
+; On Entry:
+;
+; W contains number of milliseconds to delay.
+;
+; Values to achieve 1 millisecond for various Fosc:
+; 
+; for 4Mhz  Fosc -> bigDelayCnt = .2, smallDelayCnt = .166
+; for 16Mhz Fosc -> bigDelayCnt = .6, smallDelayCnt = .222
+;
+; Note: these values do not take into account interrupts processing which will increase the delay.
+;
+
+msDelay:
+
+    banksel msDelayCnt
+
+    ifdef DEBUG_MODE            ; if debugging, don't delay
+    return
+    endif
+
+    movwf   msDelayCnt          ; number of milliseconds
+
+msD1Loop1:
+
+	movlw	.6                  ; smallDelayCnt * bigDelayCnt give delay of 1 millisecond
+	movwf	bigDelayCnt
+
+msD1Loop2:
+
+	movlw	.222                
+	movwf	smallDelayCnt
+
+msD1Loop3:
+
+	decfsz	smallDelayCnt,F
+    goto    msD1Loop3
+
+	decfsz	bigDelayCnt,F
+    goto    msD1Loop2
+
+	decfsz	msDelayCnt,F
+    goto    msD1Loop1
+
+	return
+
+; end of msDelay
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; isXgtY    Compare X word with Y word
 ;
