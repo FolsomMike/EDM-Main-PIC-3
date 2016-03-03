@@ -499,6 +499,7 @@ SERIAL_PACKET_READY EQU 3
 
 EROSION_MODE    EQU     0
 DEBOUNCE_ACTIVE EQU     1
+TIME_CRITICAL   EQU     2
     
 ; bits in statusFlags variable
 
@@ -1177,11 +1178,7 @@ processIO:
     movlw   0x0e                    ; only allow one pulse per switch
     iorwf   switchStates,F          ; enter at processIOQwkRpt for fast repeating
                                                                         
-    call    sendDataIfReady         ; send output states to remote devices if xmt buffer is ready
-                                    ; wip mks -- this does not wait for transmission complete
-                                    ;  if a LCD transmit is done immediately thereafter will it
-                                    ; be corrupted? Do LCD transmits need to wait until buffer is
-                                    ; clear?
+    call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready
     
 processIOQwkRpt:
                                     
@@ -1224,11 +1221,12 @@ processIOQwkRpt:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; sendDataIfReady
+; sendOutputStatesIfReady
 ;
-; Sends data when the serial transmit buffer is empty.
+; Sends output state data when the serial transmit buffer is empty. A counter is used to limit the
+; rate at which the data is sent to avoid overrunning the remotes with data.
 ;
-; Sets up buffer for a SET_OUTPUTS_CMD and adds appropriate data. All data in the buffer is then
+; Sets up buffer for a SET_OUTPUTS_CMD and adds appropriate data. The data in the buffer is then
 ; begun to be transmitted.
 ;
 ; Waits for transmission to be completed.
@@ -1244,28 +1242,31 @@ processIOQwkRpt:
 ; FSR1 points to the desired string
 ;
 
-sendDataIfReady:
+sendOutputStatesIfReady:
 
-    banksel flags                   ; limit rate of sending to allow receiving PICS enough time
+    banksel flags                   ; only send when counter reaches zero to limit send rate
     decfsz  xmtDataTimer,F
     return
 
-    banksel serialXmtBufNumBytes    ; when the xmt buffer is empty, send the switch states
+    banksel serialXmtBufNumBytes    ; exit if buffer busy
     movf    serialXmtBufNumBytes,W
     btfss   STATUS,Z
     return
     
     movlp   high sendOutputStates
     call    sendOutputStates
-    movlp   high sendDataIfReady
+    movlp   high sendOutputStatesIfReady
 
+    btfsc   flags3,TIME_CRITICAL    ; do not wait or set up buffer if time critical flag set
+    return
+    
     call    waitSerialXmtComplete   ; wait until buffer printed
 
     call    setupLCDBlockPkt        ; prepare xmt buffer for the next block transmit
     
     return
 
-; end of sendDataIfReady
+; end of sendOutputStatesIfReady
 ;--------------------------------------------------------------------------------------------------
     
 ;--------------------------------------------------------------------------------------------------
@@ -3325,7 +3326,10 @@ jogMode:
     call    processIO           ; call again to clear the Select switch as the reset of this
                                 ; function calls processIOQwkRpt for faster response to the
                                 ; Up/Down switch and the Select switch bounce will exit immediately
-    
+
+    banksel flags
+    bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
+                                
 ; set up the display
 
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
@@ -3448,7 +3452,7 @@ not_dwnJM:
     btfsc   switchStates,SELECT_SW_FLAG
     goto    loopJM          ; loop if Reset/Select switch not pressed
 
-; reset/enter/zero button press
+; handle Select button press
 
     btfsc   switchStates,MODE_SW_FLAG   ; in Setup mode?
     goto    exitJM                      ;exit Jog Mode if not when Select button pressed
@@ -3490,15 +3494,15 @@ noExtraDelayJM:
 
     banksel flags
 
-    goto    loopJM          ; don't display if print buffer not ready      
+    goto    loopJM                  ; continue without updating display if print buffer not ready      
 
 displayJM:
 
-    banksel flags
+    banksel flags                   ; update the display
 
-    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
+    call    setupLCDBlockPkt        ; prepare block data packet for LCD    
     
-    movlw   LINE4_COL12     ; set display position
+    movlw   LINE4_COL12             ; set display position
     call    writeControl
     call    displayPos      ; display the location of the head relative to the zero point
     movlp   high startSerialPortTransmit
@@ -3512,8 +3516,11 @@ displayJM:
 exitJM:
 
     banksel POWER_ON_L
-    bcf     POWER_ON_L,POWER_ON    ;  turn off the cutting voltage
+    bcf     POWER_ON_L,POWER_ON     ;  turn off the cutting voltage
 
+    banksel flags
+    bsf     flags3,TIME_CRITICAL    ; configure functions for normal waits and delays
+        
     call    waitXmtPrep             ; wait until buffer printed
 
     return
