@@ -1183,8 +1183,6 @@ processIO:
     iorwf   switchStates,F
                                                                         
     call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready
-    
-processIOQwkRpt:
                                     
     movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent    
@@ -3329,11 +3327,8 @@ jogMode:
 
     movlw   .255                ; delay 255 milliseconds to allow user to release the Select button
     call    msDelay             ;  as this function disables switch debouncing
+    call    processIO           ; call to clear out old switch flags from local and remote
     
-    call    processIO           ; call again to clear the Select switch as the reset of this
-                                ; function calls processIOQwkRpt for faster response to the
-                                ; Up/Down switch and the Select switch bounce will exit immediately
-
     banksel flags
     bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
                                 
@@ -3387,7 +3382,7 @@ loopJM:
     call    bigDelayA
 
     bcf     flags3,DEBOUNCE_ACTIVE
-    call    processIOQwkRpt ; process inputs and outputs
+    call    processIO       ; process inputs and outputs
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    chk_dwnJM       ; skip if Up switch not pressed
