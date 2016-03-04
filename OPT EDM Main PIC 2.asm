@@ -904,6 +904,8 @@ menuLoop:
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
 
+;    goto    cutNotch    ;debug mks
+    
     call    doMainMenu      ; display and handle the main menu
 
     goto    menuLoop
@@ -1270,6 +1272,26 @@ sendOutputStatesIfReady:
 
 ; end of sendOutputStatesIfReady
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; zeroTarget
+;
+; Zeroes the target depth variable.
+;
+; On entry:
+;
+
+zeroTarget:
+    
+    movlw   high target10
+    movwf   FSR0H
+    movlw   low target10
+    movwf   FSR0L
+    
+    goto    zeroVariable
+    
+; end of zeroTarget
+;--------------------------------------------------------------------------------------------------
     
 ;--------------------------------------------------------------------------------------------------
 ; zeroDepth
@@ -1286,6 +1308,8 @@ zeroDepth:
     movlw   low depth10
     movwf   FSR0L
 
+zeroVariable:
+    
     clrw                    ; W = 0
 
     movwi   FSR0++
@@ -1514,6 +1538,9 @@ LoopDEMM1:
 ; parse the selected option ---------------------------------------------------
 
     movf    menuOption,W       
+
+;    movlw   .1      ;debug mks
+    
     movwf   scratch0
     
     movlw   high step10         ; destination variable for step
@@ -2067,15 +2094,18 @@ skipDMMP27:
 ; For wall reduction cutting mode, switch in the smart code on retract.
 ; A good value for the overCurrentTimer retract is 1fff (hard coded).
 ;
+; This function does not disable switch debouncing like the jogMode function. Since the Up/Down
+; switch is used to adjust values during the cut, it must be debounced. It does enable the
+; TIME_CRITICAL flag to prevent data transmissions from waiting until completion so that they
+; occur in the background.
+;
 
 cutNotch:
-
+    
+    banksel flags
+    bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
+        
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
-
-    movlw   0x0
-    movwf   scratch1
-    movlw   0xff
-    call    bigDelayA       ; delay - give user chance to release button
     
     call    clearScreen     ; clear the LCD screen
 
@@ -2095,13 +2125,12 @@ cutNotch:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    banksel POWER_ON_L
-    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
-
-    banksel flags
-
 cutLoop:
 
+    call    processIO               ; check local & remote switch states
+
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
+        
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
 
@@ -2112,8 +2141,6 @@ cutLoop:
     goto    exitCN          ; exit the notch cutting mode if the reset button pressed
 
 checkUPDWNButtons:
-
-    call    processIO               ; check local & remote switch states
     
     btfss   switchStates,JOG_UP_SW_FLAG
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
@@ -2124,8 +2151,8 @@ checkUPDWNButtons:
 checkHiLimit:
 
     call    sparkTimer
-    btfss   STATUS,Z
-    goto    checkLoLimit
+    ;debug mks btfss   STATUS,Z
+    ;debug mks goto    checkLoLimit
 
 moveDownLUCL:
 
@@ -2149,7 +2176,9 @@ checkLoLimit:
     goto    wallModeCN
 
 notchModeCN:                        ; next two lines for notch mode
-      
+
+    goto    cutLoop ;debug mks
+    
     btfsc   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
     goto    cutLoop
     goto    moveUpLUCL              ; time to retract
@@ -2186,6 +2215,8 @@ moveUpLUCL:
 quickRetractCN:
 
     call    processIO              ; check local & remote switch states
+    
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting    
     
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN                  ; exit the notch cutting mode if the reset button pressed
@@ -2271,19 +2302,22 @@ displayCN:
 
 checkPositionCN:        ; compare position with desired cut depth, exit when reached
 
-    call    isDepthGreaterThanTarget ; Check to see if depth >= target 
+    call    isDepthGreaterThanOrEquToTarget
     banksel flags
     bcf     flags,AT_DEPTH
     btfsc   STATUS,C
     bsf     flags,AT_DEPTH  ; if isDepthGreaterThanTarget returned C=1, depth reached so set flag
 
-    return
+    return                  ; NOTE: this returns from displayPosLUCL, NOT cutNotch! 
 
 exitCN:
 
     banksel POWER_ON_L
     bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
+    banksel flags
+    bcf     flags3,TIME_CRITICAL    ; configure functions for normal waits and delays
+        
     call    waitXmtPrep            ; wait until buffer printed
 
     banksel flags
@@ -2297,6 +2331,34 @@ exitCN:
 ; end of cutNotch
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; handlePowerSupplyOnOff
+;
+; Turns the Cutting Current power supply on or off depending on the state of the Electrode switch.
+;
+
+handlePowerSupplyOnOff:
+    
+    btfss   switchStates,ELECTRODE_PWR_SW_FLAG
+    goto    psIsOff
+    
+    banksel POWER_ON_L
+    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
+
+    banksel flags
+    return
+    
+psIsOff:    
+
+    banksel POWER_ON_L
+    bcf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
+
+    banksel flags
+    return
+        
+; end of handlePowerSupplyOnOff
+;--------------------------------------------------------------------------------------------------
+        
 ;--------------------------------------------------------------------------------------------------
 ; setupCutNotchAndCycleTest
 ;
@@ -3350,13 +3412,15 @@ jogMode:
 
 loopJM:
 
-    movlw   0x0             ; delay to control motor speed
+    bcf     flags3,DEBOUNCE_ACTIVE      ; bypass switch debouncing for better response
+    call    processIO                   ; process inputs and outputs
+    
+    call    handlePowerSupplyOnOff    
+    
+    movlw   0x0                         ; delay to control motor speed
     movwf   scratch1
     movlw   0x1
     call    bigDelayA
-
-    bcf     flags3,DEBOUNCE_ACTIVE
-    call    processIO       ; process inputs and outputs
 
     btfsc   switchStates,JOG_UP_SW_FLAG
     goto    chk_dwnJM       ; skip if Up switch not pressed
@@ -3496,7 +3560,7 @@ exitJM:
     bcf     POWER_ON_L,POWER_ON     ;  turn off the cutting voltage
 
     banksel flags
-    bsf     flags3,TIME_CRITICAL    ; configure functions for normal waits and delays
+    bcf     flags3,TIME_CRITICAL    ; configure functions for normal waits and delays
         
     call    waitXmtPrep             ; wait until buffer printed
 
@@ -4167,7 +4231,7 @@ L13:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; isDepthGreaterThanTarget
+; isDepthGreaterThanOrEquToTarget
 ;
 ; Compares the top five most significant digits of the current depth against the top five most
 ; significant digits of the target depth. Note that the depth value can be negative, but the target
@@ -4185,11 +4249,11 @@ L13:
 ;   no requirements
 ;
 ; ON EXIT:
-;   C = 0 if Depth <= Target 
-;   C = 1 if Depth >  Target
+;   C = 0 if Depth < Target 
+;   C = 1 if Depth >=  Target
 ;   
 
-isDepthGreaterThanTarget:
+isDepthGreaterThanOrEquToTarget:
     
     bcf     STATUS,C        ; clear for operations below
     
@@ -4199,32 +4263,32 @@ isDepthGreaterThanTarget:
     btfss   STATUS,Z        ; if set, depth < target because depth sign is negative
     return                  ; return C=0 because depth < target
 
-    movf    depth10,W      ; compare next least significant digits
-    subwf   target10,W
-    btfss   STATUS,C        ; if set, depth < target
-    return                  ; return C=1 because depth > target
+    movf    target10,W      ; compare next least significant digits
+    subwf   depth10,W
+    btfss   STATUS,C
+    return                  ; return C=0 because depth <= target
     
-    movf    depth9,W       ; compare next least significant digits
-    subwf   target9,W
-    btfss   STATUS,C        ; if set, depth < target
-    return                  ; return C=1 because depth > target
+    movf    target9,W
+    subwf   depth9,W
+    btfss   STATUS,C 
+    return
     
-    movf    depth8,W       ; compare next least significant digits
-    subwf   target8,W
-    btfss   STATUS,C        ; if set, depth < target
-    return                  ; return C=1 because depth > target
+    movf    target8,W
+    subwf   depth8,W
+    btfss   STATUS,C
+    return
     
-    movf    depth7,W       ; compare next least significant digits
-    subwf   target7,W
-    btfss   STATUS,C        ; if set, depth < target
-    return                  ; return C=1 because depth > target
+    movf    target7,W
+    subwf   depth7,W
+    btfss   STATUS,C
+    return
     
-    movf    depth6,W       ; compare next least significant digits
-    subwf   target6,W
+    movf    target6,W
+    subwf   depth6,W
     
-    return                  ; return C=1 or C=0 depending on the results of the last operation
+    return
     
-; end of isDepthGreaterThanTarget
+; end of isDepthGreaterThanOrEquToTarget
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -5439,6 +5503,9 @@ setup:
     bcf     flags,DATA_MODIFIED
     bcf     flags,UPDATE_DISPLAY
 
+    call    resetSerialPortRcvBuf           ; repair flags2 variable
+    call    resetSerialPortXmtBuf
+
     call    readSparkLevelsFromEEprom
 
     ; set sparkLevel to value loaded for Notch or Wall mode depending on current mode
@@ -5448,6 +5515,10 @@ setup:
     movf    sparkLevelWall,W    ; use Wall mode value if in Wall Reduction mode
     movwf   sparkLevel          ; save the selected value
 
+    movlp   high zeroTarget
+    call    zeroTarget
+    movlp   high setup
+    
     call    readTargetValueFromEEprom    ; read the value stored for depth from the EEProm
 
     call    readPWMValsFrmEEpromSendLEDPIC
@@ -6381,8 +6452,6 @@ sendOutputStates:
     btfsc   MODE_JOGUP_SEL_EPWR_P, AC_PWR_OK_SIGNAL ; signal input high to turn on LED
     bcf     outputStates, AC_OK_LED_FLAG
 
-    bcf     outputStates, AC_OK_LED_FLAG    ;debug mks
-    
     btfsc   SHORT_DETECT_P, SHORT_DETECT        ; buzzer and Short LED on when short detected
     goto    noShortDetected
     
@@ -6390,8 +6459,6 @@ sendOutputStates:
     bcf     outputStates, SHORT_LED_FLAG
 
 noShortDetected:    
-
-    bcf     outputStates, SHORT_LED_FLAG    ;debug mks        
 
     movf    outputStates,W
     
@@ -6874,11 +6941,6 @@ resetSerialPortRcvBuf:
 
     banksel flags2
 
-    bcf     flags2, HEADER_BYTE_1_RCVD
-    bcf     flags2, HEADER_BYTE_2_RCVD
-    bcf     flags2, LENGTH_BYTE_VALID
-    bcf     flags2, SERIAL_PACKET_READY
-
     clrf    serialRcvPktLen
     clrf    serialRcvPktCnt
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H
@@ -6898,7 +6960,14 @@ RSPRBnoOERRError:
     banksel RCREG           ; clear any pending interrupt by clearing both bytes of the buffer
     movf    RCREG, W
     movf    RCREG, W
-        
+    
+    banksel flags2
+
+    bcf     flags2, HEADER_BYTE_1_RCVD
+    bcf     flags2, HEADER_BYTE_2_RCVD
+    bcf     flags2, LENGTH_BYTE_VALID
+    bcf     flags2, SERIAL_PACKET_READY
+    
     return
 
 ; end of resetSerialPortRcvBuf
