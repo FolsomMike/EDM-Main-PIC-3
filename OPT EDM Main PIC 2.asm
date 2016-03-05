@@ -500,6 +500,7 @@ SERIAL_PACKET_READY EQU 3
 EROSION_MODE    EQU     0
 DEBOUNCE_ACTIVE EQU     1
 TIME_CRITICAL   EQU     2
+ALARM_ENABLED   EQU     3
     
 ; bits in statusFlags variable
 
@@ -575,7 +576,7 @@ BLINK_ON_FLAG			EQU		0x01
     flags3                  ; bit 0: 0 = no erosion factor, 1 = use erosion factor
                             ; bit 1: 0 = debounce timer, inactive 1 = timer active
                             ; bit 2: 0 = no time criticality, 1 = time critical operation
-                            ; bit 3:
+                            ; bit 3: 0 = alarm disabled, 1 = alarm enabled
                             ; bit 4:
                             ; bit 5:
                             ; bit 6:
@@ -1945,24 +1946,56 @@ option3DMMP2:
     btfsc  	flags3,EROSION_MODE    ; check erosion mode
 	goto	useErosionDMMP2
 
-    movlw   high string25   ; add "None" suffix to erosion line
-    movwf   FSR1H
-    movlw   low string25
-    movwf   FSR1L
-    call    printStringWaitPrep     ; print the string and wait until done
-
-    goto    placeCursorDMMP2
-
-useErosionDMMP2:
-
-    movlw   high string26   ; add "17%" suffix to erosion line
+    movlw   high string26           ; add "None" suffix to erosion line
     movwf   FSR1H
     movlw   low string26
     movwf   FSR1L
     call    printStringWaitPrep     ; print the string and wait until done
 
-placeCursorDMMP2:
+    goto    option4DMMP2
 
+useErosionDMMP2:
+
+    movlw   high string27   ; add "17%" suffix to erosion line
+    movwf   FSR1H
+    movlw   low string27
+    movwf   FSR1L
+    call    printStringWaitPrep     ; print the string and wait until done
+    
+; display the fourth option
+
+option4DMMP2:
+
+    movlw   LINE4_COL1      ; set display position
+    call    writeControl
+
+    movlw   high string25           ; "7 - Alarm "
+    movwf   FSR1H
+    movlw   low string25
+    movwf   FSR1L
+    call    printStringWaitPrep     ; print the string and wait until done
+
+    btfsc  	flags3,ALARM_ENABLED    ; check mode flag
+	goto	alarmDisabledDMMP2
+
+    movlw   high string28           ; add "Off" suffix
+    movwf   FSR1H
+    movlw   low string28
+    movwf   FSR1L
+    call    printStringWaitPrep     ; print the string and wait until done
+
+    goto    placeCursorDMMP2
+
+alarmDisabledDMMP2:
+
+    movlw   high string29           ; add "On"
+    movwf   FSR1H
+    movlw   low string29
+    movwf   FSR1L
+    call    printStringWaitPrep     ; print the string and wait until done
+
+placeCursorDMMP2:
+    
 ;position the cursor on the default selection
 
     movf    cursorPos,W		; load the cursor position to highlight the current choice
@@ -1980,7 +2013,7 @@ loopDMMP21:
 ; way to the bottom where those bits are checked and handled. The bits could be checked at the
 ; beginning instead?
 
-    movlw   .03                 ; maximum menu option number
+    movlw   .04                 ; maximum menu option number
     call    handleMenuInputs
 
 ; parse the selected option ---------------------------------------------------
@@ -2041,8 +2074,28 @@ skipDMMP25:
 
 skipDMMP26:
 
-	btfss	menuOption,7
+    decfsz  scratch0,F
+    goto    skipDMMP28
+
+    ; handle option 7 - Alarm (menuOption value is 4)
+
+    btfss	flags3,ALARM_ENABLED    ; Alarm on?
 	goto	skipDMMP27
+
+	bcf		flags3,ALARM_ENABLED    ; set to off
+	call    saveFlagsToEEprom
+    goto    doMainMenuPage2         ; refresh menu
+
+skipDMMP27:
+
+	bsf		flags3,ALARM_ENABLED    ; set to on
+    call    saveFlagsToEEprom
+    goto    doMainMenuPage2         ; refresh menu
+
+skipDMMP28:
+
+	btfss	menuOption,7
+	goto	skipDMMP29
 
 	;go back to previous menu with last option defaulted	
     movlw   LINE4_COL1      ; set display position
@@ -2051,7 +2104,7 @@ skipDMMP26:
     movwf   menuOption      ; last option currently selected
 	goto	doMainMenuA		; display previous menu page
 
-skipDMMP27:
+skipDMMP29:
 
 	btfsc	menuOption,6
 	goto    loopDMMP21			; no next menu page, ignore
@@ -2173,8 +2226,6 @@ checkLoLimit:
     goto    wallModeCN
 
 notchModeCN:                        ; next two lines for notch mode
-
-    goto    cutLoop ;debug mks
     
     btfsc   LO_LIMIT_P,LO_LIMIT     ; is voltage too low? (current too high)
     goto    cutLoop
@@ -5499,8 +5550,8 @@ setup:
     bcf     flags,AT_DEPTH
     bcf     flags,DATA_MODIFIED
     bcf     flags,UPDATE_DISPLAY
-
-    call    resetSerialPortRcvBuf           ; repair flags2 variable
+    
+    call    resetSerialPortRcvBuf           ; re-init flags2 variable after loading from eeprom
     call    resetSerialPortXmtBuf
 
     call    readSparkLevelsFromEEprom
@@ -6450,13 +6501,22 @@ sendOutputStates:
     bcf     outputStates, AC_OK_LED_FLAG
 
     btfsc   SHORT_DETECT_P, SHORT_DETECT        ; buzzer and Short LED on when short detected
-    goto    noShortDetected
+    goto    noShortAlerts
+ 
+    banksel POWER_ON_L                          ; no short if power supply is not turned on
+    btfss   POWER_ON_L,POWER_ON                 ; this results in "no current" but is ignored
+    goto    noShortAlerts
+   
+    banksel outputStates
+
+    bcf     outputStates, SHORT_LED_FLAG        ; light the "short" LED
     
+    btfsc   flags3,ALARM_ENABLED                ; activate audible alarm only if enabled
     bcf     outputStates, BUZZER_FLAG
-    bcf     outputStates, SHORT_LED_FLAG
 
-noShortDetected:    
+noShortAlerts:    
 
+    banksel outputStates    
     movf    outputStates,W
     
     movlp   high writeByteToSerialXmtBuf
@@ -7476,9 +7536,12 @@ string21    dw	'4',' ','-',' ',0x00
 string22    dw	'N','o','r','m','a','l',0x00
 string23    dw	'R','e','v',0x00
 string24    dw	'6',' ','-',' ','E','r','o','s','i','o','n',' ',0x00
-string25    dw	'N','o','n','e',0x00
-string26    dw	'1','7','%',0x00
-
+string25    dw	'7',' ','-',' ','A','l','a','r','m',' ',0x00
+string26    dw	'N','o','n','e',0x00
+string27    dw	'1','7','%',0x00
+string28    dw	'O','f','f',0x00
+string29    dw	'O','n',0x00
+    
 ; end of Strings in Program Memory
 ;--------------------------------------------------------------------------------------------------
 
