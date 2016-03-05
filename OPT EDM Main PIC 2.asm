@@ -1182,7 +1182,8 @@ processIO:
     banksel switchStates
     movlw   0x0e                    ; only allow one pulse per switch closure
     iorwf   switchStates,F
-                                                                        
+    iorwf   switchStatesRemote,F                                                                        
+    
     call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready
                                     
     movlp   high handleReceivedDataIfPresent
@@ -1220,9 +1221,37 @@ processIO:
 
     return
 
-; end of processIONoDelay
+; end of processIO
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; waitUntilIORefresh
+;
+; Waits until the current debounce timeout is finished and the next IO packet is received and
+; applied to the switchStates.
+;
+; Use this at the beginning of functions to make sure the Select button and all other inputs are
+; released so they won't trigger anything until the user presses again.
+;
+; This is especially useful if a delay is used at the beginning of the function. This delay will
+; generally cause the next call to processIO to use old data from the remote as only the first
+; packet received during the delay will be processed...all subsequent packets will be tossed.
+;
+   
+waitUntilIORefresh:
+    
+wUIRLoop:        
+    
+    call    processIO                   ; allow handling of IO packets so the latest is applied
+        
+    btfsc   flags3,DEBOUNCE_ACTIVE      ; loop until debounce finished
+    goto    wUIRLoop
+    
+    return
+
+; end of waitUntilIORefresh
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; sendOutputStatesIfReady
 ;
@@ -2152,7 +2181,7 @@ skipDMMP29:
 
 cutNotch:
     
-    banksel flags
+    banksel flags3
     bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
         
     call    setupLCDBlockPkt    ; prepare block data packet for LCD
@@ -2188,7 +2217,7 @@ cutLoop:
     goto    exitCN
 
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCN          ; exit the notch cutting mode if the reset button pressed
+    goto    exitCN          ; exit the notch cutting mode if the Select button pressed
 
 checkUPDWNButtons:
     
@@ -2267,7 +2296,7 @@ quickRetractCN:
     call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting    
     
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCN                  ; exit the notch cutting mode if the reset button pressed
+    goto    exitCN                  ; exit the notch cutting mode if the Select button pressed
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
     
@@ -2318,8 +2347,6 @@ displayPosLUCL:             		; updates the display if it is time to do so
     movf    serialXmtBufNumBytes,W
     btfss   STATUS,Z
     goto    checkPositionCN 		; don't display if print buffer not ready      
-
-displayCN:
 
     banksel flags
 
@@ -2481,12 +2508,22 @@ setupCutNotchAndCycleTest:
 ; NOTE: If the cutting power supply is turned off, the head will be raised due to the fact that
 ;       the voltage appears to be low.
 ;
+; This function does not disable switch debouncing like the jogMode function as it does not
+; monitor the inputs. It does enable the TIME_CRITICAL flag to prevent data transmissions from
+; waiting until completion so that they occur in the background.
+;
 ; On entry:
 ;
+; On exit:
 ;
 
 cycleTest:
 
+    call    waitUntilIORefresh    ; make sure all buttons released to avoid errant response
+    
+    banksel flags3
+    bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
+    
     call    setupLCDBlockPkt    ; prepare block data packet for LCD    
 
     call    clearScreen     ; clear the LCD screen
@@ -2506,11 +2543,6 @@ cycleTest:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    banksel POWER_ON_L
-    bsf     POWER_ON_L,POWER_ON    ; turn on the cutting voltage
-
-    banksel scratch1
-
     movlw   0x3
     movwf   scratch1
     movlw   0xe8
@@ -2524,11 +2556,15 @@ restartCycleCT:
 
 cycleLoopCT:
 
+    call    processIO               ; check local & remote switch states
+
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
+    
     btfsc   flags,UPDATE_DISPLAY
     call    displayPosLUCL  ; update the display if data has been modified
 
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCT          ; exit the notch cutting mode if the reset button pressed
+    goto    exitCT          ; exit the notch cutting mode if the Select button pressed
 
 checkHiLimitCT:
 
@@ -2582,8 +2618,12 @@ upCycleCT:
 
 quickRetractCT:
 
+    call    processIO              ; check local & remote switch states
+    
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting    
+        
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCT          ; exit the notch cutting mode if the Select button pressed
+    goto    exitCT                  ; exit the notch cutting mode if the Select button pressed
 
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
 
@@ -2615,7 +2655,9 @@ quickRetractCT:
     call    writeControl
     movf    scratch8,W
     call    writeChar       ; write asterisk or space by "Down" label
+    movlp   high startSerialPortTransmit
     call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
+    movlp   high skipDirSymUpdateCN
 
 skipDirSymUpdateCT:
 
@@ -2639,6 +2681,9 @@ exitCT:
     banksel POWER_ON_L
     bcf     POWER_ON_L,POWER_ON    ; turn off the cutting voltage
 
+    banksel flags
+    bcf     flags3,TIME_CRITICAL    ; configure functions for normal waits and delays
+        
     call    waitXmtPrep            ; wait until buffer printed
 
     return
@@ -3413,7 +3458,7 @@ jogMode:
     call    msDelay             ;  as this function disables switch debouncing
     call    processIO           ; call to clear out old switch flags from local and remote
     
-    banksel flags
+    banksel flags3
     bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
                                 
 ; set up the display
@@ -6385,7 +6430,7 @@ loopSBLP1:
     movlp   high loopSBLP1          ; set PCLATH for the goto
     banksel scratch0
 	decfsz	scratch0,F              ; count down number of bytes transferred
-	goto	loopSBLP1               ; not zero yet - trasfer more bytes
+	goto	loopSBLP1               ; not zero yet - transfer more bytes
 
     movlp   high waitForSSP1IFHighThenClearIt  ; ready PCLATH for the calls below
     call    waitForSSP1IFHighThenClearIt    ; wait for high flag upon transmission completion
