@@ -7,10 +7,6 @@
 ## PINREGACTIONS
 ms
 No Repeat
-PIR1.SSP1IF
---
-1
-1
 --
 &
 ## ADVPINREGACTIONS
@@ -31,12 +27,12 @@ cyc
 &
 ## STIMULUSFILE
 
-PIR1
-PC = 
-0
+RCREG
+Message
+
 2
-C:\Users\Mike\Documents\6 - Controlled Documents\PIC Projects Git Repositories\OPT EDM Main PIC 2\PIR1 Stimulus.txt
-Hex
+C:\Users\Mike\Documents\6 - Controlled Documents\PIC Projects\OPT EDM Main PIC 2\Serial Port LCD Block Packet Simulation File.txt
+Pkt
 Yes
 
 --
@@ -47,5 +43,5 @@ Yes
 &
 ## ADVANCEDSCL
 
-1
+0
 &

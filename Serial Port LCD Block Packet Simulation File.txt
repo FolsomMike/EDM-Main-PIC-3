@@ -1,0 +1,4 @@
+wait 300 ms
+aa 55 03 03 ef 0e
+wait 10 ms
+aa 55 03 03 ff 0e
