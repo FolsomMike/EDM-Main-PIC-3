@@ -903,8 +903,6 @@ start:
 menuLoop:
 
     call    doExtModeMenu   ; display and handle the Standard / Extended Mode menu
-
-;    goto    cutNotch    ;debug mks
     
     call    doMainMenu      ; display and handle the main menu
 
@@ -1261,6 +1259,7 @@ sendOutputStatesIfReady:
     call    sendOutputStates
     movlp   high sendOutputStatesIfReady
 
+    banksel flags3
     btfsc   flags3,TIME_CRITICAL    ; do not wait or set up buffer if time critical flag set
     return
     
@@ -1538,8 +1537,6 @@ LoopDEMM1:
 ; parse the selected option ---------------------------------------------------
 
     movf    menuOption,W       
-
-;    movlw   .1      ;debug mks
     
     movwf   scratch0
     
@@ -2151,8 +2148,8 @@ checkUPDWNButtons:
 checkHiLimit:
 
     call    sparkTimer
-    ;debug mks btfss   STATUS,Z
-    ;debug mks goto    checkLoLimit
+    btfss   STATUS,Z
+    goto    checkLoLimit
 
 moveDownLUCL:
 
