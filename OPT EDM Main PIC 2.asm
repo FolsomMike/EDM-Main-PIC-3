@@ -2181,6 +2181,8 @@ skipDMMP29:
 
 cutNotch:
     
+    call    waitUntilIORefresh    ; make sure all buttons released to avoid errant response
+    
     banksel flags3
     bsf     flags3,TIME_CRITICAL ; configure functions to minimize waits and delays
         
@@ -2204,6 +2206,13 @@ cutNotch:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
+
+    movlw   .255            ; delay to allow the power supply to stabilize
+    call    msDelay
+    movlw   .255
+    call    msDelay
+    
 cutLoop:
 
     call    processIO               ; check local & remote switch states
@@ -2543,10 +2552,12 @@ cycleTest:
     movlw   ' '				; clear them so garbage won't be displayed first time through
     movwf   scratch8
 
-    movlw   0x3
-    movwf   scratch1
-    movlw   0xe8
-    call    bigDelayA       ; delay to give power supply a chance to come up
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
+
+    movlw   .255            ; delay to allow the power supply to stabilize
+    call    msDelay
+    movlw   .255
+    call    msDelay
 
 restartCycleCT:
 
