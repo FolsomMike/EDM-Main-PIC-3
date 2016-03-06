@@ -1570,50 +1570,25 @@ LoopDEMM1:
     
     movwf   scratch0
     
-    movlw   high step10         ; destination variable for step
-    movwf   FSR1H
-    movlw   low step10
-    movwf   FSR1L
-
     decfsz  scratch0,F
     goto    skipDEMM6
 
-    ; handle option 1 - non-extended reach cutting head installed
+    ; handle option 1 - standard reach cutting head installed
 
     bcf     flags,EXTENDED_MODE ; set flag to 0
+
+    movlp   high setStepDistance
+    call    setStepDistance
+    movlp   high exitDEMM
     
-    ; copy value for the standard tool to the inches/motor step variable
-
-    btfsc   flags3,EROSION_MODE
-    goto    useStdErosionFactor
-
-    movlw   high stdNoErosion   ; source is constant in program memory -- no erosion factor
-    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
-    movlw   low stdNoErosion
-    movwf   FSR0L
-
-    goto    copyStdStepValue
-
-useStdErosionFactor:
-
-    movlw   high std17Erosion   ; source is constant in program memory -- with erosion factor
-    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
-    movlw   low std17Erosion
-    movwf   FSR0L
-
-copyStdStepValue:
-
-    movlw   .12                 ; number of bytes
-    call    copyBytes
+    ; standard head delay values
     
-    ; standard head mode values
-
     movlw   .32
     movwf   setupDelay
     movlw   .100
     movwf   normDelay
 
-    goto    exitDEMM7
+    goto    exitDEMM
    
 skipDEMM6:
 
@@ -1622,40 +1597,20 @@ skipDEMM6:
 
     ; handle option 2 - extended reach cutting head installed
 
-    bsf     flags,EXTENDED_MODE ; set flag to 1
-
-    ; copy value for the extended tool to the inches/motor step variable
-
-    btfsc   flags3,EROSION_MODE
-    goto    useExtErosionFactor
-
-    movlw   high extNoErosion   ; source is constant in program memory -- no erosion factor
-    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
-    movlw   low extNoErosion
-    movwf   FSR0L
-
-    goto    copyExtStepValue
-
-useExtErosionFactor:
-
-    movlw   high ext17Erosion   ; source is constant in program memory -- with erosion factor
-    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
-    movlw   low ext17Erosion
-    movwf   FSR0L
-
-copyExtStepValue:
-
-    movlw   .12                 ; number of bytes
-    call    copyBytes
-
-    ; extended head values
+    bsf     flags,EXTENDED_MODE ; set flag to 1    
+    
+    movlp   high setStepDistance
+    call    setStepDistance
+    movlp   high exitDEMM   
+    
+    ; extended head delay values
 
     movlw   .4
     movwf   setupDelay
     movlw   .12
     movwf   normDelay
     
-    goto    exitDEMM7
+    goto    exitDEMM
 
 skipDEMM7:
 	
@@ -1663,7 +1618,7 @@ skipDEMM7:
 	; since there is only one page for this menu, ignore
 	goto	LoopDEMM1
 
-exitDEMM7:
+exitDEMM:
     
     return    
 
@@ -2090,15 +2045,25 @@ skipDMMP24:
 	goto	skipDMMP25
 
 	bcf		flags3,EROSION_MODE     ; set erosion factor to none
-    ;//WIP HSS// -- actually update step values and set depth to 0
-	call    saveFlagsToEEprom       ; save the new setting to EEprom
+    
+    movlp   high setStepDistance
+    call    setStepDistance
+    
+    movlp   high saveFlagsToEEprom
+    call    saveFlagsToEEprom       ; save the new setting to EEprom
+    
     goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP25:
 
 	bsf		flags3,EROSION_MODE     ; set erosion mode to 17%
-    ;//WIP HSS// -- actually update step values and set depth to 0
+
+    movlp   high setStepDistance
+    call    setStepDistance
+    
+    movlp   high saveFlagsToEEprom
     call    saveFlagsToEEprom       ; save the new setting to EEprom
+
     goto    doMainMenuPage2         ; refresh menu
 
 skipDMMP26:
@@ -4549,35 +4514,6 @@ decDepthAbs:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; copyBytes
-;
-; Copies the number of bytes specified by W from FSR0 to FSR1.
-;
-; On entry:
-;
-; W contains the number of bytes to copy
-; FSR0 points to MSB of source bytes
-; FSR1 points to MSB of destination bytes
-;
-
-copyBytes:
-
-    movwf   scratch1        ; use scratch variable as loop counter
-
-cBLoop1:
-
-    moviw   FSR0++          ; copy each byte
-    movwi   FSR1++
-
-    decfsz  scratch1,F
-    goto    cBLoop1
-
-    return
-
-; end of copyBytes
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; addBCDVars
 ;
 ; Adds two unpacked BCD variables together, ignoring sign.
@@ -6303,6 +6239,110 @@ readByteFromEEprom1ViaI2C:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; setStepDistance
+;
+; Sets the step distance based on standard/extended reach mode and erosion/no erosion mode.
+;
+; The step distance is the distance the head moves with each step of the motor.
+;
+; On entry:
+;
+; bank set to flags
+;
+; On exit:
+;
+       
+setStepDistance:
+    
+    movlw   high step10         ; destination variable for step value
+    movwf   FSR1H
+    movlw   low step10
+    movwf   FSR1L
+
+    btfsc   flags,EXTENDED_MODE
+    goto    handleExtendedModeSSD
+
+    ; copy value for the standard tool to the inches/motor step variable    
+    
+    btfsc   flags3,EROSION_MODE
+    goto    useStdErosionFactor
+
+    movlw   high stdNoErosion   ; source is constant in program memory -- no erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low stdNoErosion
+    movwf   FSR0L
+
+    goto    copyConstantToVarSSD
+
+useStdErosionFactor:
+
+    movlw   high std17Erosion   ; source is constant in program memory -- with erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low std17Erosion
+    movwf   FSR0L    
+    
+    goto    copyConstantToVarSSD
+    
+handleExtendedModeSSD:    
+
+    ; copy value for the extended tool to the inches/motor step variable
+
+    btfsc   flags3,EROSION_MODE
+    goto    useExtErosionFactor
+
+    movlw   high extNoErosion   ; source is constant in program memory -- no erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low extNoErosion
+    movwf   FSR0L
+
+    goto    copyConstantToVarSSD
+
+useExtErosionFactor:
+
+    movlw   high ext17Erosion   ; source is constant in program memory -- with erosion factor
+    movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
+    movlw   low ext17Erosion
+    movwf   FSR0L
+
+copyConstantToVarSSD:
+    
+    movlw   .12                 ; number of bytes
+    goto    copyBytes
+
+; end of setStepDistance
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; copyBytes
+;
+; Copies the number of bytes specified by W from FSR0 to FSR1.
+;
+; On entry:
+;
+; W contains the number of bytes to copy
+; bank points to scratch1
+; FSR0 points to MSB of source bytes
+; FSR1 points to MSB of destination bytes
+;
+
+copyBytes:
+
+    movwf   scratch1        ; use scratch variable as loop counter
+
+cBLoop1:
+
+    moviw   FSR0++          ; copy each byte
+    movwi   FSR1++
+
+    decfsz  scratch1,F
+    goto    cBLoop1
+
+    return
+
+; end of copyBytes
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
 ; resetLCD
 ;
 ; Resets the LCD screen.
@@ -7507,6 +7547,9 @@ handleSerialPortTransmitInt:
     goto    endISR
 
 ; end of handleSerialPortTransmitInt
+;--------------------------------------------------------------------------------------------------    
+    
+;--------------------------------------------------------------------------------------------------    
 ;--------------------------------------------------------------------------------------------------
 ;
 ;   End of EUSART Serial Port Core Functions
