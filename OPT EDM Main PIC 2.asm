@@ -494,6 +494,7 @@ HEADER_BYTE_1_RCVD  EQU 0
 HEADER_BYTE_2_RCVD  EQU 1
 LENGTH_BYTE_VALID   EQU 2
 SERIAL_PACKET_READY EQU 3
+PACKET_SEND_TYPE    EQU 4
 
 ; bits in flags3 variable
 
@@ -568,7 +569,7 @@ BLINK_ON_FLAG			EQU		0x01
                             ; bit 1: 1 = second serial port header byte received
                             ; bit 2: 1 = serial port packet length byte received and validated
                             ; bit 3: 1 = data packet ready for processing
-                            ; bit 4:
+                            ; bit 4: 0 = send LCD data packet, 1 = send Output States packet
                             ; bit 5:
 							; bit 6:
 							; bit 7:
@@ -1280,11 +1281,22 @@ sendOutputStatesIfReady:
     decfsz  xmtDataTimer,F
     return
 
+sendOutputStatesIfReadyQ:
+    
     banksel serialXmtBufNumBytes    ; exit if buffer busy
     movf    serialXmtBufNumBytes,W
-    btfss   STATUS,Z
-    return
+    btfsc   STATUS,Z
+    goto    sendSOSIR
     
+    movlw   .1                      ; if timed out but buffer was busy, set to 1 so there will not
+    ;debug mks movwf   xmtDataTimer            ; be another delay and the data will be transmitted the next
+    return                          ; time the buffer is ready
+    
+sendSOSIR:    
+
+    movlw   0x10                    ; flip the send packet type selector bit
+    xorwf   flags2,F
+
     movlp   high sendOutputStates
     call    sendOutputStates
     movlp   high sendOutputStatesIfReady
@@ -2324,6 +2336,9 @@ displayPosLUCL:             		; updates the display if it is time to do so
 
     banksel flags
 
+    movlw   0x10                    ; flip the send packet type selector bit
+    xorwf   flags2,F
+        
     bcf     flags,UPDATE_DISPLAY 	; clear flag so no update until data changed again
 
     ; display asterisk at "Up" or "Down" label depending on blade direction or erase if no movement
@@ -2510,8 +2525,6 @@ cycleTest:
 
 	call	setupCutNotchAndCycleTest	; finish the screen setup
 
-    bsf     flags,UPDATE_DISPLAY ; force display update first time through
-
     movlw   ' '				; these variables store the direction symbol (an asterisk)
     movwf   scratch7		; for display to show which direction the head is going
     movlw   ' '				; clear them so garbage won't be displayed first time through
@@ -2532,16 +2545,11 @@ restartCycleCT:
 
 cycleLoopCT:
 
-    call    processIO               ; check local & remote switch states
-
-    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
-    
-    btfsc   flags,UPDATE_DISPLAY
-    call    displayPosLUCL  ; update the display if data has been modified
+    call    handleFastIO            ; set switch flags, display depth, and send output states
 
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCT          ; exit the notch cutting mode if the Select button pressed
-
+            
 checkHiLimitCT:
 
     btfsc   HI_LIMIT_P,HI_LIMIT     ; is voltage too high? (current too low, not touching yet)
@@ -2567,8 +2575,6 @@ moveDownCT:
     movlw   '*'
     movwf   scratch8        ; display asterisk by "Down" label
 
-    bsf     flags,UPDATE_DISPLAY ; force display update to show change
-
     call    pulseMotorDownWithDelay	; move motor one step
                                  	; no delay before stepping because enough time wasted above
 
@@ -2583,59 +2589,16 @@ upCycleCT:
     movlw   ' '
     movwf   scratch8
 
-    bsf     flags,UPDATE_DISPLAY ; force display update to show change when retract is done
-								 ; the retract loop never calls the display update code
-
-	bsf		flags,UPDATE_DIR_SYM	; flag that the direction marker needs to changed to "Up"
-									; this can't be done immediately because the LDC print
-									; service might be busy, so set a flag to trigger the
-									; update during the retract loop when the LCD is ready
-; enter a fast loop without much overhead to retract quickly until head returns to starting position
-
 quickRetractCT:
 
-    call    processIO              ; check local & remote switch states
-    
-    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting    
-        
+    call    handleFastIO            ; set switch flags, display depth, and send output states
+            
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCT                  ; exit the notch cutting mode if the Select button pressed
 
     call    pulseMotorUpWithDelay  	; move motor up one step - delay to allow motor to move
 
     call    decDepth				; going up decrements the position by one step distance
-
-	; Because the retract locks into a loop until the starting position is reached, the display
-	; update code is never called to show the asterisk by the "Up" label which is confusing.
-	; This section waits until the LCD print service is not busy and then does a one time
-	; update of the direction symbol.
-
-	btfss	flags, UPDATE_DIR_SYM
-	goto    skipDirSymUpdateCT
-
-    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
-    movf    serialXmtBufNumBytes,W
-    btfss   STATUS,Z
-    goto    skipDirSymUpdateCT 		; don't display if transmit buffer not empty
-
-    banksel flags
-	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while quick retracting
- 
-    call    setupLCDBlockPkt    ; prepare block data packet for LCD    
-    
-    movlw   LINE2_COL1      ; set display position
-    call    writeControl
-    movf    scratch7,W
-    call    writeChar       ; write asterisk or space by "Up" label
-    movlw   LINE3_COL1      ; set display position
-    call    writeControl
-    movf    scratch8,W
-    call    writeChar       ; write asterisk or space by "Down" label
-    movlp   high startSerialPortTransmit
-    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
-    movlp   high skipDirSymUpdateCN
-
-skipDirSymUpdateCT:
 
     banksel cycleTestRetract0
 
@@ -2665,6 +2628,36 @@ exitCT:
     return
 
 ; end of cycleTest
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleFastIO
+;
+; Handles setting of switch input flags, sending of depth display to LCD PIC and sending of output
+; states to the Switch PIC, alternating between each type of send packet and limiting the number
+; of sends to decrease overhead.
+;
+; Used by cutNotch and cycleTest.
+;
+
+handleFastIO:
+    
+    call    processIO               ; check local & remote switch states
+
+    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
+        
+    btfsc   flags2,PACKET_SEND_TYPE
+    goto    sendOutputStatesHFIO
+    
+    call    displayPosLUCL
+    return
+   
+sendOutputStatesHFIO:    
+    
+    call    sendOutputStatesIfReadyQ
+    return
+    
+; end of handleFastIO
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
