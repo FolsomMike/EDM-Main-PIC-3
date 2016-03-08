@@ -1170,6 +1170,8 @@ flipSign:
 ; functions only see a single pulse for each switch closure. If the user holds the button down long
 ; enough, it will begin to repeat at a rate controlled by the debounce timer.
 ;
+; Call processIOQ to skip sending of Output States.
+;
 ; On entry: no values required
 ;
 ; On exit:
@@ -1180,12 +1182,14 @@ flipSign:
 
 processIO:
 
+    call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready    
+    
+processIOQ:    
+    
     banksel switchStates
     movlw   0x0e                    ; only allow one pulse per switch closure
     iorwf   switchStates,F
     iorwf   switchStatesRemote,F                                                                        
-    
-    call    sendOutputStatesIfReady ; send output states to remote devices if xmt buffer is ready
                                     
     movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent    
@@ -1270,6 +1274,8 @@ wUIRLoop:
 ; Since LCD_BLOCK_CMD packets the most common packet sent and the buffer must be prepared for
 ; various data insertions, this function leaves the buffer prepared for that packet type.
 ;
+; Call sendOutputStatesIfReadyQ to force a send without regard to the send rate control timer.
+;
 ; On entry:
 ;
 ; FSR1 points to the desired string
@@ -1289,7 +1295,7 @@ sendOutputStatesIfReadyQ:
     goto    sendSOSIR
     
     movlw   .1                      ; if timed out but buffer was busy, set to 1 so there will not
-    ;debug mks movwf   xmtDataTimer            ; be another delay and the data will be transmitted the next
+    movwf   xmtDataTimer            ; be another delay and the data will be transmitted the next
     return                          ; time the buffer is ready
     
 sendSOSIR:    
@@ -1386,7 +1392,8 @@ zeroVariable:
 ;
 ; packet is stuffed with header, length value of 3, and command byte
 ; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
-
+;
+    
 setupLCDBlockPkt:
 
     movlw   LCD_BLOCK_CMD               ; prepare to write a block of data to LCD
@@ -2637,12 +2644,16 @@ exitCT:
 ; states to the Switch PIC, alternating between each type of send packet and limiting the number
 ; of sends to decrease overhead.
 ;
+; Since this function makes a call to sendOutputStatesIfReadyQ (which skips the send rate limiting
+; controls), it calls processIOQ to skip that function's call to sendOutputStatesIfReady which
+; is an unnecessary time waste as the output states would be sent extra times.
+;
 ; Used by cutNotch and cycleTest.
 ;
 
 handleFastIO:
     
-    call    processIO               ; check local & remote switch states
+    call    processIOQ              ; check local & remote switch states
 
     call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
         
