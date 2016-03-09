@@ -2183,7 +2183,6 @@ cutNotch:
     call    setupCutNotchAndCycleTest	; finish the screen setup
 
     bcf     flags,AT_DEPTH  ; clear the depth reached flag
-    bsf     flags,UPDATE_DISPLAY ; force display update first time through
 
     movlw   ' '				; these variables store the direction symbol (an asterisk)
     movwf   scratch7		; for display to show which direction the head is going
@@ -2199,18 +2198,13 @@ cutNotch:
     
 cutLoop:
 
-    call    processIO               ; check local & remote switch states
-
-    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting
-        
-    btfsc   flags,UPDATE_DISPLAY
-    call    displayPosLUCL  ; update the display if data has been modified
-
-    btfsc   flags,AT_DEPTH  ; displayPosLUCL sets flags:AT_DEPTH if depth reached and time to exit
-    goto    exitCN
+    call    handleFastIO            ; set switch flags, display depth, and send output states
 
     btfss   switchStates,SELECT_SW_FLAG
-    goto    exitCN          ; exit the notch cutting mode if the Select button pressed
+    goto    exitCN                  ; exit the notch cutting mode if the Select button pressed
+
+    btfsc   flags,AT_DEPTH          ; displayPosLUCL sets flags:AT_DEPTH if target reached
+    goto    exitCN
 
 checkUPDWNButtons:
     
@@ -2236,8 +2230,6 @@ moveDownLUCL:
     movwf   scratch7
     movlw   '*'
     movwf   scratch8        ; display asterisk by "Down" label
-
-    bsf     flags,UPDATE_DISPLAY ; force display update to show change
 
     call    pulseMotorDownWithDelay  	; move motor one step
                                  		; no delay before stepping because enough time wasted above
@@ -2272,60 +2264,18 @@ moveUpLUCL:
     movlw   ' '
     movwf   scratch8
 
-    bsf     flags,UPDATE_DISPLAY ; force display update to show change when retract is done
-								 ; the retract loop never calls the display update code
-
-	bsf		flags,UPDATE_DIR_SYM	; flag that the direction marker needs to changed to "Up"
-									; this can't be done immediately because the LDC print
-									; service might be busy, so set a flag to trigger the
-									; update during the retract loop when the LCD is ready
-
 ; enter a fast loop without much overhead to retract quickly until over-current is gone
 
 quickRetractCN:
 
-    call    processIO              ; check local & remote switch states
-    
-    call    handlePowerSupplyOnOff  ; turn cutting current power supply on/off per switch setting    
-    
+    call    handleFastIO            ; set switch flags, display depth, and send output states
+
     btfss   switchStates,SELECT_SW_FLAG
     goto    exitCN                  ; exit the notch cutting mode if the Select button pressed
 
     call    pulseMotorWithDelay    	; move motor one step - delay to allow motor to move
     
     call    decDepth				; going up decrements the position by one step distance
-
-	; Because the retract locks into a loop until the over current is cleared, the display
-	; update code is never called to show the asterisk by the "Up" label which is confusing.
-	; This section waits until the LCD print service is not busy and then does a one time
-	; update of the direction symbol.
-
-	btfss	flags, UPDATE_DIR_SYM
-	goto    skipDirSymUpdateCN
-
-    banksel serialXmtBufNumBytes    ; update the display if serial transmit not in progress
-    movf    serialXmtBufNumBytes,W
-    btfss   STATUS,Z
-	goto    skipDirSymUpdateCN
-
-    banksel flags
-	bcf		flags,UPDATE_DIR_SYM	; only update the display one time while quick retracting
-
-    call    setupLCDBlockPkt    ; prepare block data packet for LCD
- 
-    movlw   LINE2_COL1      ; set display position
-    call    writeControl
-    movf    scratch7,W
-    call    writeChar       ; write asterisk or space by "Up" label
-    movlw   LINE3_COL1      ; set display position
-    call    writeControl
-    movf    scratch8,W
-    call    writeChar       ; write asterisk or space by "Down" label
-    movlp   high startSerialPortTransmit
-    call    startSerialPortTransmit ; force buffer to print, don't wait due to time criticality
-    movlp   high skipDirSymUpdateCN
-    
-skipDirSymUpdateCN:
 
     banksel LO_LIMIT_P
 
