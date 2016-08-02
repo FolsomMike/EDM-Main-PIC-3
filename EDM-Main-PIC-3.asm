@@ -1,5 +1,5 @@
 ;--------------------------------------------------------------------------------------------------
-; Project:  OPT EDM Notch Cutter -- Main PIC software
+; Project:  OPT EDM Notch Cutter -- Main PIC software for use with a UI board.
 ; Date:     2/29/12
 ; Revision: See Revision History notes below.
 ;
@@ -1861,7 +1861,7 @@ skipDMM3:
 ; "5 - Motor Dir Normal" or "5 - Motor Dir Reverse"
 ;
 ; 0x1, 0x94
-; "6 - Erosion None" or "6 - Erosion 17%"
+; "6 - Erosion None" or "6 - Erosion xx%"
 ;
 ; 0x1, 0x80
 ; Carriage Return (to place cursor on first option)
@@ -1959,7 +1959,7 @@ option3DMMP2:
 
 useErosionDMMP2:
 
-    movlw   high string27   ; add "17%" suffix to erosion line
+    movlw   high string27   ; add "xx%" suffix to erosion line
     movwf   FSR1H
     movlw   low string27
     movwf   FSR1L
@@ -2060,7 +2060,7 @@ skipDMMP24:
 
     ; handle option 6 - Erosion Change (menuOption value is 3)
 
-    btfss	flags3,EROSION_MODE     ; erosion factor is 17%?
+    btfss	flags3,EROSION_MODE     ; erosion factor is xx%
 	goto	skipDMMP25
 
 	bcf		flags3,EROSION_MODE     ; set erosion factor to none
@@ -2075,7 +2075,7 @@ skipDMMP24:
 
 skipDMMP25:
 
-	bsf		flags3,EROSION_MODE     ; set erosion mode to 17%
+	bsf		flags3,EROSION_MODE     ; set erosion mode to xx%
 
     movlp   high setStepDistance
     call    setStepDistance
@@ -6230,9 +6230,9 @@ setStepDistance:
 
 useStdErosionFactor:
 
-    movlw   high std17Erosion   ; source is constant in program memory -- with erosion factor
+    movlw   high std22Erosion   ; source is constant in program memory -- with erosion factor
     movwf   FSR0H               ;  ("high" directive will automatically set bit 7 for program space)
-    movlw   low std17Erosion
+    movlw   low std22Erosion
     movwf   FSR0L    
     
     goto    copyConstantToVarSSD
@@ -7521,21 +7521,30 @@ handleSerialPortTransmitInt:
 ; These are unpacked BCD decimal values, each digit can be 0-9.
 ; The decimal point is two digits from the left for all depth related values.
 ;
+; Carrol Thompson specified that the industry standard value used for erosion rate was 17%.
+; The software version used for at least 7 years was actually about 22.5% due to math inaccuracies.
+; This version at first used exactly 17%, but was reverted to 22% as that seemed more accurate.
+; The erosion rate does not seem linear, at least as seen between .04" and .06" depth.
+; The extended reach tool still uses 17% and probably needs to be changed to 22%. The menu says
+; 22% for both the standard and extended reach tools, so it is wrong for the extended reach.
+;
 ; Standard Reach Tool Ratio
 ;
 ; One motor step is 0.000217391"
-; typically, blade erosion is 17%
 ;
-; For 1:1 (no erosion factor), use .000217391
-; For 17% erosion factior use .000217391 * .83 = 0.000180435
+; For 1:1 (no erosion factor), use 0.000217391
+; For 17% erosion factor use 0.000217391 * .83 = 0.000180435
+;
+; For 22% erosion factor use 0.000217391 * .78 = 0.000169565
+; 
+; For 23% erosion factor use 0.000217391 * .77 = 0.000167391
 ;
 ; Extended Reach Tool Ratio
 ;
 ; One motor step is .000023774"
-; typically, blade erosion is 17%
 ;
 ; For 1:1 (no erosion factor), use .000023774
-; For 17% erosion factior use .000023774 * .83 = 0.000019732
+; For 17% erosion factor use .000023774 * .83 = 0.000019732
 ;
 ; Unpacked BCD is used for inch/pulse depth related values as it allows for the fastest math during
 ; operation. The decimal point is two digits from the left for all depth related values.
@@ -7551,6 +7560,12 @@ stdNoErosion    dw  0,0,0,0,0,2,1,7,3,9,1,0     ; unpacked BCD ~ xx.xxxxxxxxx
 ; 00.000180435 -> standard tool with 17% erosion factor ~ inches/motor pulse
 std17Erosion    dw  0,0,0,0,0,1,8,0,4,3,5,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
+; 00.000167391 -> standard tool with 22% erosion factor ~ inches/motor pulse
+std22Erosion    dw  0,0,0,0,0,1,6,9,5,6,5,0     ; unpacked BCD ~ xx.xxxxxxxxx
+
+; 00.000167391 -> standard tool with 23% erosion factor ~ inches/motor pulse
+std23Erosion    dw  0,0,0,0,0,1,6,7,3,9,1,0     ; unpacked BCD ~ xx.xxxxxxxxx
+    
 ; 00.000023774 -> extended tool with no erosion factor ~ inches/motor pulse
 extNoErosion    dw  0,0,0,0,0,0,2,3,7,7,4,0     ; unpacked BCD ~ xx.xxxxxxxxx
 
@@ -7564,7 +7579,7 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2,0     ; unpacked BCD ~ xx.xxxxxxxxx
 ; Strings in Program Memory
 ;
     
-string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','i',0x00
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','j',0x00
 string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
 string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
 string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
@@ -7591,7 +7606,7 @@ string23    dw	'R','e','v',0x00
 string24    dw	'6',' ','-',' ','E','r','o','s','i','o','n',' ',0x00
 string25    dw	'7',' ','-',' ','A','l','a','r','m',' ',0x00
 string26    dw	'N','o','n','e',0x00
-string27    dw	'1','7','%',0x00
+string27    dw	'2','2','%',0x00
 string28    dw	'O','f','f',0x00
 string29    dw	'O','n',0x00
     
