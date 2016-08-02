@@ -924,32 +924,17 @@ menuLoop:
 ;
 ; This function also allows streamlining of debounce code.
 ;
-
-trapSwitchInputs:
-
-    banksel MODE_JOGUP_SEL_EPWR_P
-
-    btfss   MODE_JOGUP_SEL_EPWR_P,MODE_SW
-    bcf     switchStates,MODE_SW_FLAG
-
-    btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
-    bcf     switchStates,JOG_UP_SW_FLAG
-
 ; Select switch input is ignored here...for boards connected to a User Interface board, R84 is
 ; installed which allows the Cutting Current Power Supply's AC OK output to be read via this input.
 ; The signal is no longer valid as the Select switch. That switch is now connected to the User
 ; Interface board which will report its state via serial transmission.
 ;
-;    btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
-;    bcf     switchStates,SELECT_SW_FLAG
+; NOTE: This function no longer processes the local switch inputs. They were being triggered by
+; by noise during cutting. The inputs are now monitored via packets sent by the remote UI board.
+;
 
-    btfss   MODE_JOGUP_SEL_EPWR_P,ELECTRODE_PWR_SW
-    bcf     switchStates,ELECTRODE_PWR_SW_FLAG
+trapSwitchInputs:
 
-    banksel JOGDWN_P
-
-    btfss   JOGDWN_P,JOG_DOWN_SW
-    bcf     switchStates,JOG_DOWN_SW_FLAG
 
     return
 
