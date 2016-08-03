@@ -309,6 +309,10 @@ LINE3_COL2  EQU     0x95
 LINE4_COL12 EQU     0xdf
 LINE4_COL18 EQU     0xe5
 
+JOG_DEGLITCH_CNT2 EQU    .5
+JOG_DEGLITCH_CNT1 EQU    .255
+JOG_DEGLITCH_CNT0 EQU    .255
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
 
@@ -638,6 +642,10 @@ BLINK_ON_FLAG			EQU		0x01
 
     debounceH               ; switch debounce timer decremented by the interrupt routine
     debounceL
+
+    jogDeGlitchCntr2        ; counter used to ignore noise spikes on switch lines
+    jogDeGlitchCntr1
+    jogDeGlitchCntr0
 
     msDelayCnt
     bigDelayCnt
@@ -2192,11 +2200,9 @@ cutLoop:
     goto    exitCN
 
 checkUPDWNButtons:
-    
-    btfss   switchStates,JOG_UP_SW_FLAG
+
     call    adjustSpeedOrPowerUp   ; increment the speed (sparkLevel) value or Power Level
 
-    btfss   switchStates,JOG_DOWN_SW_FLAG
     call    adjustSpeedOrPowerDown ; decrement the speed (sparkLevel) value or Power Level
 
 checkHiLimit:
@@ -2729,15 +2735,51 @@ noRetractOCT:
 ;--------------------------------------------------------------------------------------------------
 ; adjustSpeedOrPowerUp
 ;
+; Checks to see if Jog Up switch active. If so:
+;
 ; If Mode switch is in "Setup" position, jumps to adjustSpeedUp.
 ; If switch is in "Normal" position, jumps to adjustPowerUp.
+;
+; A deglitch algorithm is used for units with cable extensions on the Jog switch. These are
+; subject to noise pulses picked up from the cutting current cable. The switch must be in the
+; active position for a specified number of counts before it is acknowledged.
 ;
 
 adjustSpeedOrPowerUp:
 
-    btfss   switchStates,MODE_SW_FLAG  ; in Setup mode?
-    goto    adjustSpeedUp              ; adjust Speed setting if in "Setup" mode
-    goto    adjustPowerUp              ; adjust Power Level if in "Normal" mode
+    btfsc   switchStates,JOG_UP_SW_FLAG ; do nothing if switch not active
+    return
+
+    movlw   JOG_DEGLITCH_CNT2       ; load deglitch counter
+    movwf   jogDeGlitchCntr2
+
+aSOPU1:    ; loop until counter is zero or switch inactive detected
+
+    movlw   JOG_DEGLITCH_CNT1       ; load deglitch counter
+    movwf   jogDeGlitchCntr1
+
+aSOPU2:
+
+    movlw   JOG_DEGLITCH_CNT0       ; load deglitch counter
+    movwf   jogDeGlitchCntr0
+
+aSOPU3:
+
+    btfsc   switchStates,JOG_UP_SW_FLAG
+    return
+
+    decfsz  jogDeGlitchCntr0,F
+    goto    aSOPU3
+
+    decfsz  jogDeGlitchCntr1,F
+    goto    aSOPU2
+
+    decfsz  jogDeGlitchCntr2,F
+    goto    aSOPU1
+
+    btfss   switchStates,MODE_SW_FLAG   ; in Setup mode?
+    goto    adjustSpeedUp               ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerUp               ; adjust Power Level if in "Normal" mode
 
 ; end of adjustSpeedOrPowerUp
 ;--------------------------------------------------------------------------------------------------
@@ -2745,15 +2787,51 @@ adjustSpeedOrPowerUp:
 ;--------------------------------------------------------------------------------------------------
 ; adjustSpeedOrPowerDown
 ;
+; Checks to see if Jog Down switch active. If so:
+;
 ; If Mode switch is in "Setup" position, jumps to adjustSpeedDown.
 ; If switch is in "Normal" position, jumps to adjustPowerDown.
+;
+; A deglitch algorithm is used for units with cable extensions on the Jog switch. These are
+; subject to noise pulses picked up from the cutting current cable. The switch must be in the
+; active position for a specified number of counts before it is acknowledged.
 ;
 
 adjustSpeedOrPowerDown:
 
-    btfss   switchStates,MODE_SW_FLAG   ; in Setup mode?
-    goto    adjustSpeedDown             ; adjust Speed setting if in "Setup" mode
-    goto    adjustPowerDown             ; adjust Power Level if in "Normal" mode
+    btfsc   switchStates,JOG_DOWN_SW_FLAG   ; do nothing if switch not active
+    return
+
+    movlw   JOG_DEGLITCH_CNT2                ; load deglitch counter
+    movwf   jogDeGlitchCntr2
+
+aSOPD1:    ; loop until counter is zero or switch inactive detected
+
+    movlw   JOG_DEGLITCH_CNT1                ; load deglitch counter
+    movwf   jogDeGlitchCntr1
+
+aSOPD2:
+
+    movlw   JOG_DEGLITCH_CNT0                ; load deglitch counter
+    movwf   jogDeGlitchCntr0
+
+aSOPD3:
+
+    btfsc   switchStates,JOG_DOWN_SW_FLAG
+    return
+
+    decfsz  jogDeGlitchCntr0,F
+    goto    aSOPD3
+
+    decfsz  jogDeGlitchCntr1,F
+    goto    aSOPD2
+
+    decfsz  jogDeGlitchCntr2,F
+    goto    aSOPD1
+
+    btfss   switchStates,MODE_SW_FLAG       ; in Setup mode?
+    goto    adjustSpeedDown                 ; adjust Speed setting if in "Setup" mode
+    goto    adjustPowerDown                 ; adjust Power Level if in "Normal" mode
 
 ; end of adjustSpeedOrPowerDown
 ;--------------------------------------------------------------------------------------------------
@@ -2765,6 +2843,8 @@ adjustSpeedOrPowerDown:
 ;
 ; If jog up then speed is increased by one, rolling from 9 to 1 if appropriate.
 ; If jog down then speed is decreased by one, rolling from 1 to 9 if appropriate.
+;
+; Uses W, speedValue, sparkLevel, sparkLevelNotch, sparkLevelWall
 ;
 ; speedValue range is 1-9 which is converted to sparkLevel range of 0x01-0x11
 ;
@@ -2781,10 +2861,10 @@ adjustSpeedOrPowerDown:
 
 adjustSpeedUp:
 
-; jog up button press    
+; jog up button press
 
     incf    speedValue,F    ; increment the value
-    
+
     movlw   .10
     subwf   speedValue,W    ; check if 10 reached
     btfss   STATUS,Z
@@ -2800,7 +2880,7 @@ adjustSpeedDown:
 ; jog down button press
 
     decf    speedValue,F    ; decrement the value
-    
+
     movlw   .0
     subwf   speedValue,W    ; check if less than 1
     btfss   STATUS,Z
@@ -2883,7 +2963,7 @@ adjustPowerUp:
     goto    updateAP        ; display the digit
 
     movlw   .1
-    movwf   powerLevel      ; roll around if limit reached
+    movwf   powerLevel      ; roll around if limti reached
 
     goto    updateAP        ; display the digit
 
@@ -5462,6 +5542,10 @@ setup:
     call    zeroDepth               ; clear the depth position variable
     movlp   high setup              ; set PCLATH back to what it was
 
+    clrf   jogDeGlitchCntr2
+    clrf   jogDeGlitchCntr1
+    clrf   jogDeGlitchCntr0
+
     clrf   flags3
     clrf    xmtDataTimer
     
@@ -7564,7 +7648,7 @@ ext17Erosion    dw  0,0,0,0,0,0,1,9,7,3,2,0     ; unpacked BCD ~ xx.xxxxxxxxx
 ; Strings in Program Memory
 ;
     
-string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','j',0x00
+string0	    dw	'O','P','T',' ','A','u','t','o','N','o','t','c','h','e','r',' ','7','.','7','k',0x00
 string1	    dw	'C','H','O','O','S','E',' ','C','O','N','F','I','G','U','R','A','T','I','O','N',0x00
 string2	    dw	'1',' ','-',' ','E','D','M',' ','N','o','t','c','h','C','u','t','t','e','r',0x00
 string3	    dw	'2',' ','-',' ','E','D','M',' ','E','x','t','e','n','d',' ','R','e','a','c','h',0x00
